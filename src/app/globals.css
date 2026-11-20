@@ -57,3 +57,51 @@
 @media(max-width:1260px){.sidebar{width:225px;min-width:225px}.metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:148px}.goal-item-top span{font-size:12px}}
 @media(max-width:850px){.sidebar{width:260px;min-width:260px}.auth-layout{grid-template-columns:1fr;gap:28px;width:min(500px,100%)}.auth-hero-brand{margin-bottom:20px}.auth-hero>p{font-size:15px;margin-bottom:0}.auth-features{display:none}.auth-panel{padding:30px}.page-heading h1{font-size:33px}}
 @media(max-width:620px){.page-heading p{font-size:14px}.kpi{padding:16px;min-height:142px}.kpi strong{font-size:24px}.kpi-top{font-size:12px}.kpi-bottom{font-size:12px}.chart-card,.funnel-card{min-height:350px;padding:18px}.goals-card{padding:19px}.goal-item-top{font-size:14px}.goal-item-top span{font-size:13px}.bottom-card{min-height:220px;padding:19px}.section-heading h2,.chart-title h2{font-size:16px}.small-heading h2{font-size:16px}.auth-screen{padding:28px 16px}.auth-hero h1{letter-spacing:-1px}.auth-hero-brand{font-size:22px}.auth-panel{padding:25px 21px}.auth-panel h2{font-size:24px}.auth-hero>p{font-size:14px}}
+
+
+/* Compact metrics toolbar and collapsible desktop navigation */
+.app-shell.sidebar-hidden .sidebar{display:none}
+.sidebar-toggle{display:inline-grid;place-items:center;flex:none;width:38px;height:38px;background:#191a2a;color:#c5bbdf;border:1px solid #333149;border-radius:9px;transition:background .15s,color .15s}
+.sidebar-toggle:hover{background:#302345;color:#fff}
+.topbar{gap:16px}
+.topbar-left{display:flex;align-items:center;gap:13px;min-width:0}
+.topbar-right{gap:13px;min-width:0}
+.topbar-controls{display:flex;align-items:center;gap:10px}
+.topbar-controls .period{height:40px}
+.topbar-controls .btn{height:40px}
+.page-body{padding-top:18px}
+@media(max-width:1180px){
+ .topbar{padding-left:20px;padding-right:20px;gap:11px}
+ .topbar-left{gap:8px}
+ .topbar-right{gap:9px}
+ .topbar-controls{gap:8px}
+ .topbar-controls .period{padding:0 9px}
+ .topbar-controls .period select{min-width:100px;font-size:13px}
+ .topbar-controls .btn{padding:0 11px;font-size:13px}
+}
+@media(max-width:850px){
+ .app-shell.sidebar-hidden .sidebar{display:flex}
+ .sidebar-toggle{display:none}
+ .topbar{gap:11px}
+ .topbar-left{flex:1}
+ .hamburger{margin:0}
+}
+@media(max-width:740px){
+ .topbar{height:auto;min-height:65px;display:flex;flex-wrap:wrap;align-items:center;padding:11px 14px;gap:9px}
+ .topbar-left{order:1;min-width:0}
+ .topbar-right{display:contents}
+ .topbar-controls{order:3;flex:0 0 100%;width:100%;justify-content:space-between;gap:8px}
+ .topbar-controls .period{flex:1;min-width:0;max-width:none;height:42px}
+ .topbar-controls .period select{min-width:0;max-width:100%;flex:1}
+ .topbar-controls .btn{flex:0 0 auto;height:42px;white-space:nowrap}
+ .live-indicator{order:2;margin-left:auto;white-space:nowrap}
+ .topbar-right>.icon-btn{order:2}
+ .topbar-right>.top-avatar{order:2}
+ .page-body{padding-top:12px}
+}
+@media(max-width:390px){
+ .breadcrumb{font-size:12px}
+ .topbar-controls .btn{padding:0 9px;font-size:12px}
+ .topbar-controls .period{padding:0 8px;gap:5px}
+ .topbar-controls .period select{font-size:12px}
+}

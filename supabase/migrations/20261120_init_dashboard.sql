@@ -1,9 +1,9 @@
 -- Executada no projeto Supabase vinculado (2026-11-20).
 create table if not exists public.monthly_goals (
  id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
- month date not null check(extract(day from month)=1), contracts_target integer not null default 20 check(contracts_target>0),
- setup_revenue_target numeric(14,2) not null default 20000 check(setup_revenue_target>=0),
- new_mrr_target numeric(14,2) not null default 6000 check(new_mrr_target>=0),
+ month date not null check(extract(day from month)=1), contracts_target integer not null check(contracts_target>0),
+ setup_revenue_target numeric(14,2) not null check(setup_revenue_target>=0),
+ new_mrr_target numeric(14,2) not null check(new_mrr_target>=0),
  updated_at timestamptz not null default now(), unique(user_id,month));
 create table if not exists public.monthly_results (
  id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,

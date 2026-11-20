@@ -27,8 +27,10 @@ export default function Home(){
  const [user,setUser]=useState<User|null>(null),[authChecking,setAuthChecking]=useState(true),[authOpen,setAuthOpen]=useState(false),[authMode,setAuthMode]=useState<'login'|'signup'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [month,setMonth]=useState(getMonth()),[goals,setGoals]=useState<GoalRow>(blankGoal),[result,setResult]=useState<ResultRow>(blankResult(getMonth())),[history,setHistory]=useState<ResultRow[]>([]),[actions,setActions]=useState<ActionRow[]>([]);
  const [editOpen,setEditOpen]=useState(false),[goalDraft,setGoalDraft]=useState<GoalRow>(blankGoal),[resultDraft,setResultDraft]=useState<ResultRow>(blankResult(getMonth())),[actionText,setActionText]=useState('');
- const [activeTab,setActiveTab]=useState<Tab>('Métricas e Metas'),[sidebarOpen,setSidebarOpen]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [activeTab,setActiveTab]=useState<Tab>('Métricas e Metas'),[sidebarOpen,setSidebarOpen]=useState(false),[sidebarHidden,setSidebarHidden]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const alert=(message:string)=>setNotice(message);
+ useEffect(()=>{try{setSidebarHidden(window.localStorage.getItem('liderapp-sidebar-hidden')==='true')}catch{}},[]);
+ const toggleSidebar=()=>{const next=!sidebarHidden;setSidebarHidden(next);try{window.localStorage.setItem('liderapp-sidebar-hidden',String(next))}catch{}};
  const load=useCallback(async(u:User|null,m:string)=>{
   if(!supabase||!u){setGoals(blankGoal);setHistory([]);setActions([]);setResult(blankResult(m));return}
   const [goalResponse,resultResponse,actionResponse]=await Promise.all([
@@ -82,7 +84,7 @@ export default function Home(){
    </section>
   </div>
  </main>;
- return <div className="app-shell">
+ return <div className={"app-shell"+(sidebarHidden?" sidebar-hidden":"")}>
   <aside className={'sidebar '+(sidebarOpen?'is-open':'')}>
     <div className="brand"><div className="brand-mark">Λ</div><div>LIDER<span>APP</span><small>GESTÃO DE AGÊNCIA</small></div><button className="mobile-close" onClick={()=>setSidebarOpen(false)} aria-label="Fechar menu"><X size={20}/></button></div>
     <div className="nav-title">WORKSPACE</div>
@@ -91,9 +93,24 @@ export default function Home(){
   </aside>
   {sidebarOpen&&<div className="backdrop" onClick={()=>setSidebarOpen(false)}/>}
   <main className="main">
-   <header className="topbar"><button className="hamburger" onClick={()=>setSidebarOpen(true)} aria-label="Abrir menu"><Menu/></button><div className="breadcrumb">Visão geral <span>/</span> <b>{activeTab}</b></div><div className="topbar-right"><span className="live-indicator"><i/> Banco conectado</span><button className="icon-btn" onClick={()=>alert('Suas notificações aparecerão aqui.')} aria-label="Notificações"><Bell size={19}/></button><button className="avatar top-avatar" onClick={()=>supabase?.auth.signOut()} aria-label="Sair da conta" title="Sair da conta">{user?.email?.slice(0,2).toUpperCase()||'AG'}</button></div></header>
+   <header className="topbar">
+    <div className="topbar-left">
+     <button className="sidebar-toggle" onClick={toggleSidebar} aria-label={sidebarHidden?'Mostrar menu lateral':'Ocultar menu lateral'} title={sidebarHidden?'Mostrar menu lateral':'Ocultar menu lateral'} aria-expanded={!sidebarHidden}><Menu size={21}/></button>
+     <button className="hamburger" onClick={()=>setSidebarOpen(true)} aria-label="Abrir menu lateral"><Menu size={21}/></button>
+     <div className="breadcrumb">Visão geral <span>/</span> <b>{activeTab}</b></div>
+    </div>
+    <div className="topbar-right">
+     {activeTab==='Métricas e Metas'&&<div className="topbar-controls">
+      <label className="period"><CalendarDays size={18}/><select aria-label="Selecionar mês" value={month} onChange={e=>setMonth(e.target.value)}>{periodOptions.map(m=><option key={m} value={m}>{new Date(m+'T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>)}</select><ChevronDown size={14}/></label>
+      <button className="btn purple-btn" onClick={()=>{setGoalDraft({...goals});setResultDraft({...result});setEditOpen(true)}}><Settings2 size={17}/> Gerenciar metas</button>
+     </div>}
+     <span className="live-indicator"><i/> Banco conectado</span>
+     <button className="icon-btn" onClick={()=>alert('Suas notificações aparecerão aqui.')} aria-label="Notificações"><Bell size={19}/></button>
+     <button className="avatar top-avatar" onClick={()=>supabase?.auth.signOut()} aria-label="Sair da conta" title="Sair da conta">{user?.email?.slice(0,2).toUpperCase()||'AG'}</button>
+    </div>
+   </header>
    <div className="page-body">
-   {activeTab==='Métricas e Metas'?<><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"></span> CENTRAL DE PERFORMANCE</div><h1>Métricas <span>&</span> Metas</h1><p>Seus resultados em um só lugar. Dados claros para decisões inteligentes.</p></div><div className="heading-actions"><label className="period"><CalendarDays size={18}/><select aria-label="Selecionar mês" value={month} onChange={e=>setMonth(e.target.value)}>{periodOptions.map(m=><option key={m} value={m}>{new Date(m+'T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>)}</select><ChevronDown size={14}/></label><button className="btn purple-btn" onClick={()=>{setGoalDraft({...goals});setResultDraft({...result});setEditOpen(true)}}><Settings2 size={17}/> Gerenciar metas</button></div></div>
+   {activeTab==='Métricas e Metas'?<>
    {notice&&<div className="notice"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
       <div className="metrics-grid"><Kpi title="Contratos fechados" value={hasResult?String(result.contracts_count):'—'} sub={'No período selecionado'} Icon={FileText}/><Kpi title="Receita de implantação" value={hasResult?formatMoney(result.setup_revenue):'—'} sub="Valor contratado no mês" Icon={Wallet}/><Kpi title="Novo MRR" value={hasResult?formatMoney(result.new_mrr):'—'} sub="Recorrência adicionada no mês" Icon={TrendingUp}/><Kpi title="ARR equivalente do novo MRR" value={hasResult?formatMoney(result.new_mrr*12):'—'} sub="Anualização, não garantida" Icon={Activity}/></div>
    <section className="card goals-card"><div className="section-heading"><div className="heading-icon"><Target size={22}/></div><div><h2>Metas do mês</h2><p>Acompanhe seu progresso em direção aos objetivos.</p></div><button className="link-btn" onClick={()=>{setGoalDraft({...goals});setResultDraft({...result});setEditOpen(true)}}>Editar metas <ArrowRight size={15}/></button></div><div className="goals-inner"><div className="donut-section"><div className="donut" style={{background:goals.contracts_target>0?'conic-gradient(#9162ff 0% '+Math.min(100,pct)+'%,#29243f '+Math.min(100,pct)+'% 100%)':'#29243f'}}><div><strong>{goals.contracts_target>0?pct+'%':'—'}</strong><small>{goals.contracts_target>0?'da meta de contratos':'Meta não definida'}</small></div></div></div><div className="goal-items"><MiniProgress name="Contratos" value={result.contracts_count} target={goals.contracts_target}/><MiniProgress name="Faturamento de implantação" value={result.setup_revenue} target={goals.setup_revenue_target} unit="R$"/><MiniProgress name="Novo MRR" value={result.new_mrr} target={goals.new_mrr_target} unit="R$"/></div></div></section>

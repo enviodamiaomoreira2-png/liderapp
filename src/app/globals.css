@@ -105,3 +105,18 @@
  .topbar-controls .period{padding:0 8px;gap:5px}
  .topbar-controls .period select{font-size:12px}
 }
+
+
+/* Keep the compact toolbar usable on tablets and phones. */
+@media(max-width:850px){
+ .topbar{height:auto;min-height:65px;display:flex;flex-wrap:wrap;align-items:center;padding:11px 14px;gap:9px}
+ .topbar-left{order:1;flex:0 0 auto}
+ .topbar-left .breadcrumb{display:none}
+ .topbar-right{display:contents}
+ .topbar-controls{order:3;flex:0 0 100%;width:100%;justify-content:space-between;gap:8px}
+ .topbar-controls .period{flex:1;min-width:0;height:42px}
+ .topbar-controls .period select{min-width:0;max-width:100%;flex:1}
+ .topbar-controls .btn{flex:0 0 auto;height:42px}
+ .topbar .live-indicator{order:2;margin-left:auto;font-size:12px;white-space:nowrap}
+ .topbar-right>.icon-btn,.topbar-right>.top-avatar{order:2}
+}

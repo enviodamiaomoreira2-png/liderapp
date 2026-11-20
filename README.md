@@ -20,3 +20,15 @@ Painel SaaS da agência. **Next.js 15, React 19, Recharts, Supabase e Vercel**.
 ## Segurança
 Todas as tabelas têm Row Level Security habilitado e políticas por `auth.uid()`. Não use service role no frontend.
 Dados de funil, comparativos e projeções são exibidos apenas com registros suficientes.
+
+## CRM — Funil, clientes e atividades
+
+- **Comercial**: pipeline por etapas configuráveis, oportunidades arrastáveis (HTML5 Drag and Drop), pesquisa, próximos compromissos, status aberto/ganho/perdido, valores de implantação e mensalidade e histórico.
+- **Clientes**: pessoas e empresas vinculadas a negócios e atividades; pesquisa, edição e painel de relacionamento.
+- **Atividades**: agenda centralizada com ligações, reuniões, tarefas, e-mails, follow-ups e prazos; lista/semana, pesquisa e filtros de pendentes, atrasadas, hoje, concluídas.
+- **Metas e métricas**: consulta `crm_monthly_wins` (view PostgreSQL com `security_invoker` + RLS) para somar negócios marcados como **ganhos**, agrupados pelo mês do fechamento no horário de São Paulo. As métricas atualizam ao mudar o negócio e também quando a aba é aberta.
+- Para não duplicar vendas, o formulário de resultados mensais inclui **somente valores adicionais fora do CRM**. Não digite novamente no formulário um negócio registrado no funil.
+- Ao reabrir um negócio ganho ou marcar perdido, ele deixa de contar como ganho no painel. Alterar valores de negócios ganhos também atualiza os totais automaticamente pela view.
+- O cadastro de etapas padrão é feito apenas como configuração inicial da conta; nenhuma oportunidade, contato ou atividade fictícia é criada.
+- Banco: `supabase/migrations/20261120_create_crm.sql`, aplicado ao projeto Supabase existente.
+- O calendário, o funil e o cadastro já operam sem integrações externas de e-mail/Google Calendar. Sincronização e automações serão etapas opcionais.

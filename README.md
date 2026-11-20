@@ -5,11 +5,11 @@ Painel SaaS da agência. **Next.js 15, React 19, Recharts, Supabase e Vercel**.
 ## Funcionalidades
 - Interface responsiva com tema escuro, indicadores de contratos, implantação, MRR e ARR.
 - Metas mensais e resultados editáveis e persistidos por usuário.
-- Funil comercial, histórico de receitas e evolução do MRR; só apresenta números efetivamente cadastrados.
-- Autenticação de e-mail e senha pelo Supabase Auth.
+- Funil comercial, histórico de receitas e evolução do MRR com dados efetivamente cadastrados.
+- Login obrigatório antes de exibir o dashboard, utilizando Supabase Auth.
 - Ações do mês com conclusão persistida.
-- Estado de prévia com os **14 contratos, R$ 14.000 de implantação e R$ 4.200 de novo MRR** relatados pelo proprietário, identificados como ainda não gravados no banco; clique em "Salvar dados informados" para persistir na conta.
-- Meta inicial ilustrativa de 20 contratos, R$ 20.000 e R$ 6.000; editável.
+- Nenhum registro é ilustrativo ou pré-carregado. Novas contas começam com métricas vazias, que aparecem somente depois de salvar dados reais.
+- As metas começam sem configuração e podem ser criadas e editadas após o login.
 
 ## Desenvolver
 1. Copie `.env.example` para `.env.local` e adicione **somente a chave publicável** do Supabase.

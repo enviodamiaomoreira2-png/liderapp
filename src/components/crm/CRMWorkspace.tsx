@@ -283,6 +283,6 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
   {lostDeal&&<Modal title="Marcar como perdido" subtitle={lostDeal.title} onClose={()=>setLostDeal(null)}>
     <Field name="Motivo da perda"><textarea rows={4} value={lostReason} onChange={e=>setLostReason(e.target.value)} placeholder="Orçamento, concorrente, momento..."/></Field>
     <div className="crm-form-actions"><button className="crm-button secondary" onClick={()=>setLostDeal(null)}>Cancelar</button><button className="crm-button danger" disabled={busy} onClick={()=>void changeStatus(lostDeal,'lost',lostReason)}><XCircle size={16}/> Confirmar perda</button></div>
-   </Modal>
+   </Modal>}
  </div>
 }

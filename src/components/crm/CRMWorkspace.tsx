@@ -62,6 +62,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const deal=(id:string|null)=>deals.find(x=>x.id===id);
  const nextActivity=(id:string)=>activities.filter(a=>a.deal_id===id&&!a.done).sort((a,b)=>a.due_at.localeCompare(b.due_at))[0];
  const linkedActivity=(id:string)=>activities.filter(a=>a.deal_id===id).sort((a,b)=>Number(a.done)-Number(b.done)||a.due_at.localeCompare(b.due_at));
+ const dealPayments=(id:string)=>payments.filter(p=>p.deal_id===id).sort((a,b)=>b.paid_at.localeCompare(a.paid_at));
  const who=(d:CRMDeal)=>org(d.organization_id)?.name||person(d.person_id)?.name||'Contato não vinculado';
  const logEvent=async(id:string,kind:string,detail:string)=>{if(supabase)await supabase.from('crm_deal_events').insert({user_id:userId,deal_id:id,kind,detail})};
  const createDeal=(stageId?:string)=>{setEditingDeal(null);setDealForm({...initialDeal(),stage_id:stageId||stages[0]?.id||''});setDealOpen(true)};
@@ -98,6 +99,36 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const onDropStage=async(e:DragEvent<HTMLElement>,target:string)=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);if(d)await moveDeal(d,target)};
  const onDropStatus=async(e:DragEvent<HTMLElement>,s:'won'|'lost')=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);setDragId('');if(!d)return;if(s==='won')await changeStatus(d,'won');else askLost(d)};
  const deleteDeal=async(d:CRMDeal)=>{if(!supabase||!window.confirm('Excluir definitivamente "'+d.title+'"?'))return;const{error}=await supabase.from('crm_deals').delete().eq('id',d.id);if(error){setNotice(error.message);return}setDealOpen(false);await updated()};
+
+ const openPayment=(d:CRMDeal)=>{
+  setPaymentDeal(d);setPaymentMonth(currentSaoPauloDay().slice(0,7));setPaymentDate(currentSaoPauloDay());
+  setPaymentAmount(Number(d.monthly_value)>0?String(d.monthly_value):'');setPaymentNotes('');
+ };
+ const savePayment=async(e:FormEvent)=>{
+  e.preventDefault();if(!supabase||!paymentDeal||busy)return;
+  const amount=Number(paymentAmount);
+  if(!Number.isFinite(amount)||amount<=0){setNotice('Informe o valor positivo da mensalidade efetivamente paga.');return}
+  if(!/^\d{4}-\d{2}$/.test(paymentMonth)||!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)||paymentDate>currentSaoPauloDay()){
+   setNotice('Informe um mês de referência e uma data de pagamento válida, não futura.');return;
+  }
+  const existing=payments.find(p=>p.deal_id===paymentDeal.id&&p.reference_month===paymentMonth+'-01');
+  if(existing&&!window.confirm('Já existe um pagamento registrado para esse negócio neste mês. Deseja atualizar o registro existente?'))return;
+  setBusy(true);
+  const {error}=await supabase.from('crm_recurring_payments').upsert({
+   user_id:userId,deal_id:paymentDeal.id,reference_month:paymentMonth+'-01',
+   paid_at:paymentDate,amount,notes:paymentNotes.trim()||null,updated_at:new Date().toISOString()
+  },{onConflict:'user_id,deal_id,reference_month'});
+  setBusy(false);
+  if(error){setNotice('Erro ao registrar mensalidade: '+error.message);return}
+  await logEvent(paymentDeal.id,'updated','Mensalidade recebida: '+currency(amount)+' — '+paymentMonth);
+  setPaymentDeal(null);setNotice('Mensalidade registrada como paga. Faturamento total atualizado.');await updated();
+ };
+ const deletePayment=async(payment:CRMRecurringPayment)=>{
+  if(!supabase||!window.confirm('Excluir este pagamento de mensalidade? O faturamento total será recalculado.'))return;
+  const {error}=await supabase.from('crm_recurring_payments').delete().eq('id',payment.id).eq('user_id',userId);
+  if(error){setNotice(error.message);return}
+  setNotice('Registro de pagamento excluído.');await updated();
+ };
  const newContact=(kind:ContactKind)=>{setContactModal(kind);setContactEditId(null);setOrgForm({...emptyOrg});setPersonForm({...emptyPerson})};
  const editContact=(kind:ContactKind,id:string)=>{setContactModal(kind);setContactEditId(id);if(kind==='organizations'){const c=org(id);if(c)setOrgForm({name:c.name,email:c.email||'',phone:c.phone||'',website:c.website||'',industry:c.industry||'',notes:c.notes||''})}else{const p=person(id);if(p)setPersonForm({name:p.name,email:p.email||'',phone:p.phone||'',role:p.role||'',notes:p.notes||'',organization_id:p.organization_id||''})}};
  const saveContact=async(e:FormEvent)=>{
@@ -192,6 +223,14 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
      <Field full name="Observações"><textarea rows={4} value={dealForm.notes} onChange={e=>setDealForm({...dealForm,notes:e.target.value})} placeholder="Necessidades, objeções e próximos passos..."/></Field>
     </div><div className="crm-form-actions"><button type="submit" className="crm-button primary" disabled={busy}><Check size={17}/>{editingDeal?'Salvar negócio':'Criar negócio'}</button></div></form>
     {editingDeal&&<><div className="crm-result-actions">{editingDeal.status==='open'?<><button className="crm-button success" onClick={()=>void changeStatus(editingDeal,'won')}><CheckCircle2 size={17}/> Ganho</button><button className="crm-button danger" onClick={()=>askLost(editingDeal)}><XCircle size={17}/> Perdido</button></>:<button className="crm-button secondary" onClick={()=>void changeStatus(editingDeal,'open')}><RefreshCw size={17}/> Reabrir</button>}<button className="crm-icon-button destructive" onClick={()=>void deleteDeal(editingDeal)}><Trash2 size={18}/></button></div>
+     {(editingDeal.status==='won'||dealPayments(editingDeal.id).length>0)&&<section className="crm-detail-section crm-payments-section">
+       <header><h3><CircleDollarSign size={18}/> Mensalidades pagas</h3>
+        {editingDeal.status==='won'&&<button className="crm-button primary small" onClick={()=>openPayment(editingDeal)}><Plus size={16}/> Registrar pagamento</button>}
+       </header>
+       <p className="crm-payment-help">Só os pagamentos realmente recebidos entram no Faturamento total. O MRR contratado não é contabilizado como recebido.</p>
+       <div className="crm-payment-total"><span>Total de mensalidades recebidas</span><strong>{currency(dealPayments(editingDeal.id).reduce((sum,p)=>sum+Number(p.amount),0))}</strong></div>
+       {dealPayments(editingDeal.id).length?dealPayments(editingDeal.id).map(p=><div className="crm-payment-row" key={p.id}><div><b>{currency(Number(p.amount))}</b><small>Referência {p.reference_month.slice(5,7)}/{p.reference_month.slice(0,4)} · Pago em {dateFmt(p.paid_at+'T12:00:00-03:00',{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Sao_Paulo'})}</small></div><button className="crm-icon-button destructive" title="Excluir pagamento" onClick={()=>void deletePayment(p)}><Trash2 size={16}/></button></div>):<p className="crm-mini-empty">Nenhuma mensalidade paga foi registrada.</p>}
+      </section>}
      <section className="crm-detail-section"><header><h3><CalendarDays size={18}/> Atividades ({linkedActivity(editingDeal.id).length})</h3><button className="crm-button primary small" onClick={()=>newActivity({deal:editingDeal})}><Plus size={16}/> Nova atividade</button></header>{linkedActivity(editingDeal.id).length?linkedActivity(editingDeal.id).map(a=><div className="crm-linked" key={a.id}><button className={'crm-checkbox '+(a.done?'checked':'')} onClick={()=>void toggleActivity(a)}>{a.done&&<Check size={13}/>}</button><button onClick={()=>editActivity(a)}><b className={a.done?'struck':''}>{a.title}</b><span><ActivityTypeIcon type={a.type}/>{labelType(a.type)} · {dateFmt(a.due_at,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span></button><ChevronRight size={16}/></div>):<p className="crm-mini-empty">Nenhuma atividade cadastrada para este negócio.</p>}</section>
      <section className="crm-detail-section"><header><h3><History size={18}/> Histórico</h3></header>{events.filter(x=>x.deal_id===editingDeal.id).length?events.filter(x=>x.deal_id===editingDeal.id).map(x=><div className="crm-event" key={x.id}><i/><div><b>{x.detail||x.kind}</b><small>{dateFmt(x.created_at,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div></div>):<p className="crm-mini-empty">As movimentações aparecerão aqui.</p>}</section>
     </>}
@@ -232,6 +271,15 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
    </div><div className="crm-form-actions">{editingActivity&&<button type="button" className="crm-button danger-outline" onClick={()=>void deleteActivity(editingActivity)}><Trash2 size={16}/> Excluir</button>}<button className="crm-button primary" disabled={busy} type="submit"><Check size={16}/> Salvar atividade</button></div></form></Modal>}
   {stageModal&&<Modal title="Etapas do funil" subtitle="Crie etapas e personalize probabilidades" onClose={()=>setStageModal(false)}><div className="crm-stage-list">{stages.map(s=><div className="crm-stage-row" key={s.id}><i style={{background:s.color}}/><b>{s.name}</b><small>{s.probability}%</small><button className="crm-icon-button" onClick={()=>{setStageEdit(s);setStageTitle(s.name);setStageProbability(s.probability)}} title="Editar etapa"><Edit3 size={16}/></button><button className="crm-icon-button destructive" onClick={()=>void deleteStage(s)} title="Excluir etapa vazia"><Trash2 size={16}/></button></div>)}</div><form className="crm-form" onSubmit={saveStage}><h3>{stageEdit?'Editar etapa':'Adicionar etapa'}</h3><div className="crm-form-grid"><Field name="Nome"><input required maxLength={80} value={stageTitle} onChange={e=>setStageTitle(e.target.value)}/></Field><Field name="Probabilidade (%)"><input type="number" min={0} max={100} value={stageProbability} onChange={e=>setStageProbability(Number(e.target.value))}/></Field></div><div className="crm-form-actions">{stageEdit&&<button className="crm-button secondary" type="button" onClick={()=>{setStageEdit(null);setStageTitle('');setStageProbability(50)}}>Cancelar edição</button>}<button className="crm-button primary" disabled={busy} type="submit">{stageEdit?'Salvar':'Adicionar'}</button></div></form></Modal>}
 
+  {paymentDeal&&<Modal title="Registrar mensalidade paga" subtitle={paymentDeal.title} onClose={()=>setPaymentDeal(null)}>
+   <p className="crm-payment-help">Registre somente pagamentos já recebidos. O valor será somado ao Faturamento total.</p>
+   <form onSubmit={savePayment} className="crm-form"><div className="crm-form-grid">
+    <Field name="Mês de referência"><input type="month" required value={paymentMonth} onChange={e=>setPaymentMonth(e.target.value)}/></Field>
+    <Field name="Data do pagamento"><input type="date" required max={currentSaoPauloDay()} value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></Field>
+    <Field name="Valor recebido (R$)"><input type="number" min="0.01" step="0.01" required value={paymentAmount} onChange={e=>setPaymentAmount(e.target.value)} placeholder="0,00"/></Field>
+    <Field full name="Observações"><textarea rows={3} value={paymentNotes} onChange={e=>setPaymentNotes(e.target.value)} placeholder="Opcional — meio de pagamento, detalhes..."/></Field>
+   </div><div className="crm-form-actions"><button type="button" className="crm-button secondary" onClick={()=>setPaymentDeal(null)}>Cancelar</button><button type="submit" className="crm-button success" disabled={busy}><CheckCircle2 size={16}/> Confirmar recebimento</button></div></form>
+  </Modal>}
   {lostDeal&&<Modal title="Marcar como perdido" subtitle={lostDeal.title} onClose={()=>setLostDeal(null)}>
     <Field name="Motivo da perda"><textarea rows={4} value={lostReason} onChange={e=>setLostReason(e.target.value)} placeholder="Orçamento, concorrente, momento..."/></Field>
     <div className="crm-form-actions"><button className="crm-button secondary" onClick={()=>setLostDeal(null)}>Cancelar</button><button className="crm-button danger" disabled={busy} onClick={()=>void changeStatus(lostDeal,'lost',lostReason)}><XCircle size={16}/> Confirmar perda</button></div>

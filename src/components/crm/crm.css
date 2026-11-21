@@ -209,3 +209,16 @@
  .crm-archive-title{flex-wrap:wrap}
  .crm-archive-title h2{font-size:19px}
 }
+
+
+/* Paid recurring ledger in the deal details */
+.crm-payments-section{border-top-color:#5a476c}
+.crm-payment-help{color:#9995af;font-size:12px;line-height:1.65;margin:8px 0 14px}
+.crm-payment-total{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#241d35;border:1px solid #49385b;border-radius:10px;padding:14px;margin:13px 0}
+.crm-payment-total span{font-size:12px;color:#bbb3d2}
+.crm-payment-total strong{font-size:19px;color:#d9bdff}
+.crm-payment-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #322e40}
+.crm-payment-row>div{display:flex;flex-direction:column;gap:6px}
+.crm-payment-row b{font-size:14px;color:#efeafd}
+.crm-payment-row small{font-size:12px;color:#928da8}
+.crm-payment-row .crm-icon-button{width:32px;height:32px}

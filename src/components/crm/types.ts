@@ -4,7 +4,7 @@ export type ActivityType='call'|'meeting'|'task'|'email'|'followup'|'deadline'|'
 export type CRMStage={id:string;user_id:string;name:string;position:number;probability:number;color:string};
 export type CRMOrganization={id:string;user_id:string;name:string;email:string|null;phone:string|null;website:string|null;industry:string|null;notes:string|null;created_at:string};
 export type CRMPerson={id:string;user_id:string;organization_id:string|null;name:string;email:string|null;phone:string|null;role:string|null;notes:string|null;created_at:string};
-export type CRMDeal={id:string;user_id:string;title:string;stage_id:string;organization_id:string|null;person_id:string|null;setup_value:number;monthly_value:number;status:DealStatus;won_at:string|null;lost_at:string|null;lost_reason:string|null;expected_close:string|null;label:string|null;notes:string|null;position:number;created_at:string;updated_at:string};
+export type CRMDeal={id:string;user_id:string;title:string;stage_id:string;organization_id:string|null;person_id:string|null;setup_value:number;monthly_value:number;status:DealStatus;won_at:string|null;lost_at:string|null;lost_reason:string|null;meeting_scheduled_at:string|null;meeting_held_at:string|null;expected_close:string|null;label:string|null;notes:string|null;position:number;created_at:string;updated_at:string};
 export type CRMActivity={id:string;user_id:string;title:string;type:ActivityType;description:string|null;due_at:string;duration_minutes:number;done:boolean;done_at:string|null;deal_id:string|null;person_id:string|null;organization_id:string|null;created_at:string};
 export type CRMDealEvent={id:string;user_id:string;deal_id:string;kind:string;detail:string|null;created_at:string};
 export const types:{key:ActivityType;label:string;icon:string}[]=[
@@ -23,7 +23,7 @@ export const stageDefaults=[
  {name:'Proposta enviada',probability:65,color:'#d7a54d'},
  {name:'Negociação',probability:85,color:'#9e77f5'}
 ];
-export const emptyDeal={title:'',stage_id:'',organization_id:'',person_id:'',setup_value:'',monthly_value:'',expected_close:'',label:'',notes:''};
+export const emptyDeal={title:'',stage_id:'',organization_id:'',person_id:'',setup_value:'',monthly_value:'',expected_close:'',won_date:'',lost_date:'',meeting_scheduled_at:'',meeting_held_at:'',label:'',notes:''};
 export type DealDraft=typeof emptyDeal;
 export const emptyOrg={name:'',email:'',phone:'',website:'',industry:'',notes:''};
 export const emptyPerson={name:'',email:'',phone:'',role:'',notes:'',organization_id:''};
@@ -36,3 +36,13 @@ export const localInput=(iso:string)=>{const d=new Date(iso);if(Number.isNaN(d.g
 export const localTomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);d.setHours(9,0,0,0);return localInput(d.toISOString())};
 export const isLate=(a:CRMActivity)=>!a.done&&new Date(a.due_at).getTime()<Date.now();
 export const isToday=(v:string)=>new Date(v).toDateString()===new Date().toDateString();
+
+/** Date-only wins are normalized to 12:00 in Sao Paulo so historical month reporting is stable. */
+export const dealDay=(iso?:string|null):string=>{
+ if(!iso)return '';
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(iso));
+ const pick=(name:string)=>parts.find(p=>p.type===name)?.value||'';
+ return pick('year')+'-'+pick('month')+'-'+pick('day');
+};
+export const dayToIso=(day:string):string|null=>day?new Date(day+'T12:00:00-03:00').toISOString():null;
+export const currentSaoPauloDay=():string=>dealDay(new Date().toISOString());

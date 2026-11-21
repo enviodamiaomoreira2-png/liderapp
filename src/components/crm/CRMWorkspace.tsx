@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {DragEvent,FormEvent,ReactNode} from 'react';
 import {Activity,ArrowRight,Building2,Calendar,CalendarDays,Check,CheckCircle2,ChevronLeft,ChevronRight,CircleDollarSign,Clock,Edit3,GripVertical,History,LayoutGrid,List,Mail,Phone,Plus,RefreshCw,Search,Settings2,Target,Trash2,TrendingUp,UserRound,Users,X,XCircle} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
-import {type CRMView,type CRMStage,type CRMOrganization,type CRMPerson,type CRMDeal,type CRMActivity,type CRMDealEvent,type ActivityType,type DealStatus,type DealDraft,type ActivityDraft,stageDefaults,types,emptyDeal,emptyOrg,emptyPerson,emptyActivity,currency,dateFmt,localInput,localTomorrow,isLate,isToday} from './types';
+import {type CRMView,type CRMStage,type CRMOrganization,type CRMPerson,type CRMDeal,type CRMActivity,type CRMDealEvent,type ActivityType,type DealStatus,type DealDraft,type ActivityDraft,stageDefaults,types,emptyDeal,emptyOrg,emptyPerson,emptyActivity,currency,dateFmt,localInput,localTomorrow,isLate,isToday,dealDay,dayToIso,currentSaoPauloDay} from './types';
 
 type Props={view:CRMView;userId:string;onMetricsChanged:()=>void};
 type ContactKind='organizations'|'people';
@@ -29,7 +29,8 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const [contactModal,setContactModal]=useState<ContactKind|null>(null),[contactEditId,setContactEditId]=useState<string|null>(null),[orgForm,setOrgForm]=useState({...emptyOrg}),[personForm,setPersonForm]=useState({...emptyPerson});
  const [activityModal,setActivityModal]=useState(false),[editingActivity,setEditingActivity]=useState<CRMActivity|null>(null),[activityForm,setActivityForm]=useState<ActivityDraft>(initialActivity()),[activityFilter,setActivityFilter]=useState<ActivityFilter>('pending'),[calendarMode,setCalendarMode]=useState(false),[calendarDate,setCalendarDate]=useState(new Date());
  const [stageModal,setStageModal]=useState(false),[stageEdit,setStageEdit]=useState<CRMStage|null>(null),[stageTitle,setStageTitle]=useState(''),[stageProbability,setStageProbability]=useState(50);
- const [lostDeal,setLostDeal]=useState<CRMDeal|null>(null),[lostReason,setLostReason]=useState('');
+ const [lostDeal,setLostDeal]=useState<CRMDeal|null>(null),[lostReason,setLostReason]=useState(''),[lostDate,setLostDate]=useState(currentSaoPauloDay());
+ const [wonDeal,setWonDeal]=useState<CRMDeal|null>(null),[wonDate,setWonDate]=useState(currentSaoPauloDay());
  const reload=useCallback(async()=>{
   if(!supabase)return;
   setLoading(true);
@@ -63,25 +64,44 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const who=(d:CRMDeal)=>org(d.organization_id)?.name||person(d.person_id)?.name||'Contato não vinculado';
  const logEvent=async(id:string,kind:string,detail:string)=>{if(supabase)await supabase.from('crm_deal_events').insert({user_id:userId,deal_id:id,kind,detail})};
  const createDeal=(stageId?:string)=>{setEditingDeal(null);setDealForm({...initialDeal(),stage_id:stageId||stages[0]?.id||''});setDealOpen(true)};
- const openDeal=(d:CRMDeal)=>{setEditingDeal(d);setDealForm({title:d.title,stage_id:d.stage_id,organization_id:d.organization_id||'',person_id:d.person_id||'',setup_value:String(d.setup_value),monthly_value:String(d.monthly_value),expected_close:d.expected_close||'',label:d.label||'',notes:d.notes||''});setDealOpen(true)};
+ const askWon=(d:CRMDeal)=>{setWonDeal(d);setWonDate(currentSaoPauloDay())};
+ const askLost=(d:CRMDeal)=>{setLostDeal(d);setLostReason('');setLostDate(currentSaoPauloDay())};
+ const openDeal=(d:CRMDeal)=>{setEditingDeal(d);setDealForm({title:d.title,stage_id:d.stage_id,organization_id:d.organization_id||'',person_id:d.person_id||'',setup_value:String(d.setup_value),monthly_value:String(d.monthly_value),expected_close:d.expected_close||'',won_date:dealDay(d.won_at),lost_date:dealDay(d.lost_at),meeting_scheduled_at:d.meeting_scheduled_at?localInput(d.meeting_scheduled_at):'',meeting_held_at:d.meeting_held_at?localInput(d.meeting_held_at):'',label:d.label||'',notes:d.notes||''});setDealOpen(true)};
  const saveDeal=async(e:FormEvent)=>{
   e.preventDefault();if(!supabase||busy)return;
   if(!dealForm.title.trim()||!dealForm.stage_id){setNotice('Preencha o título e a etapa.');return}
   if([dealForm.setup_value,dealForm.monthly_value].some(x=>Number.isNaN(Number(x||0))||Number(x||0)<0)){setNotice('Valores devem ser positivos.');return}
+  if(editingDeal?.status==='won'&&!dealForm.won_date){setNotice('Informe a data do ganho antes de salvar.');return}
+  if(editingDeal?.status==='lost'&&!dealForm.lost_date){setNotice('Informe a data da perda antes de salvar.');return}
   setBusy(true);
-  const payload={user_id:userId,title:dealForm.title.trim(),stage_id:dealForm.stage_id,organization_id:selectValue(dealForm.organization_id),person_id:selectValue(dealForm.person_id),setup_value:Number(dealForm.setup_value||0),monthly_value:Number(dealForm.monthly_value||0),expected_close:selectValue(dealForm.expected_close),label:selectValue(dealForm.label),notes:selectValue(dealForm.notes),updated_at:new Date().toISOString()};
+  const payload={user_id:userId,title:dealForm.title.trim(),stage_id:dealForm.stage_id,organization_id:selectValue(dealForm.organization_id),person_id:selectValue(dealForm.person_id),setup_value:Number(dealForm.setup_value||0),monthly_value:Number(dealForm.monthly_value||0),expected_close:selectValue(dealForm.expected_close),meeting_scheduled_at:dealForm.meeting_scheduled_at?new Date(dealForm.meeting_scheduled_at).toISOString():null,meeting_held_at:dealForm.meeting_held_at?new Date(dealForm.meeting_held_at).toISOString():null,label:selectValue(dealForm.label),notes:selectValue(dealForm.notes),updated_at:new Date().toISOString(),
+    ...(editingDeal?.status==='won'?{won_at:dayToIso(dealForm.won_date)}:{}),
+    ...(editingDeal?.status==='lost'?{lost_at:dayToIso(dealForm.lost_date)}:{})
+  };
   const result=editingDeal?await supabase.from('crm_deals').update(payload).eq('id',editingDeal.id).select('*').single():await supabase.from('crm_deals').insert(payload).select('*').single();
   setBusy(false);if(result.error||!result.data){setNotice('Erro ao salvar negócio: '+result.error?.message);return}
-  await logEvent(result.data.id,editingDeal?'updated':'created',editingDeal?'Dados atualizados':'Negócio criado');
+  await logEvent(result.data.id,editingDeal?'updated':'created',editingDeal?'Dados e datas do negócio atualizados':'Negócio criado');
   setEditingDeal(result.data as CRMDeal);setNotice('Negócio salvo com sucesso.');await updated();
  };
- const changeStatus=async(d:CRMDeal,next:DealStatus,reason='')=>{
-  if(!supabase||busy)return;setBusy(true);
+ const changeStatus=async(d:CRMDeal,next:DealStatus,reason='',selectedDay='')=>{
+  if(!supabase||busy)return;
+  const closeDay=selectedDay||currentSaoPauloDay();
+  if((next==='won'||next==='lost')&&!/^\d{4}-\d{2}-\d{2}$/.test(closeDay)){setNotice('Selecione uma data de fechamento válida.');return}
+  setBusy(true);
   const now=new Date().toISOString();
-  const result=await supabase.from('crm_deals').update({status:next,won_at:next==='won'?now:null,lost_at:next==='lost'?now:null,lost_reason:next==='lost'?reason:null,updated_at:now}).eq('id',d.id);
-  setBusy(false);if(result.error){setNotice(result.error.message);return}
-  await logEvent(d.id,next==='won'?'won':next==='lost'?'lost':'reopened',next==='won'?'Negócio marcado como ganho':next==='lost'?'Negócio perdido'+(reason?' — '+reason:''):'Negócio reaberto');
-  setLostDeal(null);setDealOpen(false);setDragId('');setNotice(next==='won'?'Negócio ganho! O painel de métricas foi atualizado.':next==='lost'?'Negócio registrado como perdido.':'Negócio reaberto.');
+  const result=await supabase.from('crm_deals').update({
+   status:next,
+   won_at:next==='won'?dayToIso(closeDay):null,
+   lost_at:next==='lost'?dayToIso(closeDay):null,
+   lost_reason:next==='lost'?reason:null,
+   updated_at:now
+  }).eq('id',d.id).eq('user_id',userId);
+  setBusy(false);
+  if(result.error){setNotice('Não foi possível alterar o negócio: '+result.error.message);return}
+  await logEvent(d.id,next==='won'?'won':next==='lost'?'lost':'reopened',next==='won'?'Negócio ganho em '+closeDay:next==='lost'?'Negócio perdido em '+closeDay+(reason?' — '+reason:''):'Negócio reaberto');
+  setLostDeal(null);setWonDeal(null);setDealOpen(false);setDragId('');
+  setStatus(next);
+  setNotice(next==='won'?'Negócio ganho! As métricas considerarão a data escolhida.':next==='lost'?'Negócio registrado como perdido.':'Negócio reaberto.');
   await updated();
  };
  const moveDeal=async(d:CRMDeal,target:string)=>{
@@ -92,7 +112,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
   await updated();
  };
  const onDropStage=async(e:DragEvent<HTMLElement>,target:string)=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);if(d)await moveDeal(d,target)};
- const onDropStatus=async(e:DragEvent<HTMLElement>,s:'won'|'lost')=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);setDragId('');if(!d)return;if(s==='won')await changeStatus(d,'won');else{setLostDeal(d);setLostReason('')}};
+ const onDropStatus=async(e:DragEvent<HTMLElement>,s:'won'|'lost')=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);setDragId('');if(!d)return;if(s==='won')askWon(d);else askLost(d)};
  const deleteDeal=async(d:CRMDeal)=>{if(!supabase||!window.confirm('Excluir definitivamente "'+d.title+'"?'))return;const{error}=await supabase.from('crm_deals').delete().eq('id',d.id);if(error){setNotice(error.message);return}setDealOpen(false);await updated()};
  const newContact=(kind:ContactKind)=>{setContactModal(kind);setContactEditId(null);setOrgForm({...emptyOrg});setPersonForm({...emptyPerson})};
  const editContact=(kind:ContactKind,id:string)=>{setContactModal(kind);setContactEditId(id);if(kind==='organizations'){const c=org(id);if(c)setOrgForm({name:c.name,email:c.email||'',phone:c.phone||'',website:c.website||'',industry:c.industry||'',notes:c.notes||''})}else{const p=person(id);if(p)setPersonForm({name:p.name,email:p.email||'',phone:p.phone||'',role:p.role||'',notes:p.notes||'',organization_id:p.organization_id||''})}};
@@ -129,7 +149,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  };
  const deleteStage=async(s:CRMStage)=>{if(!supabase)return;if(stages.length<2||deals.some(d=>d.stage_id===s.id)){setNotice('Mova os negócios para outra etapa antes de excluir.');return}if(!window.confirm('Excluir etapa "'+s.name+'"?'))return;const{error}=await supabase.from('crm_stages').delete().eq('id',s.id);if(error){setNotice(error.message);return}await updated()};
  const matches=(...parts:(string|null|undefined)[])=>parts.some(v=>(v||'').toLowerCase().includes(query.trim().toLowerCase()));
- const visibleDeals=deals.filter(d=>d.status===status&&matches(d.title,org(d.organization_id)?.name,person(d.person_id)?.name,d.label));
+ const visibleDeals=deals.filter(d=>d.status===status&&matches(d.title,org(d.organization_id)?.name,person(d.person_id)?.name,d.label)).sort((a,b)=>status==='open'?0:new Date((status==='won'?b.won_at:b.lost_at)||0).getTime()-new Date((status==='won'?a.won_at:a.lost_at)||0).getTime());
  const contactList=(contactKind==='organizations'?organizations:people).filter(c=>matches(c.name,c.email,c.phone));
  const activityList=activities.filter(a=>{
   if(!matches(a.title,a.description,deal(a.deal_id)?.title,org(a.organization_id)?.name,person(a.person_id)?.name))return false;

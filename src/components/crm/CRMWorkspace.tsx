@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import type {DragEvent,FormEvent,ReactNode} from 'react';
 import {Activity,ArrowRight,Building2,Calendar,CalendarDays,Check,CheckCircle2,ChevronLeft,ChevronRight,CircleDollarSign,Clock,Edit3,GripVertical,History,LayoutGrid,List,Mail,Phone,Plus,RefreshCw,Search,Settings2,Target,Trash2,TrendingUp,UserRound,Users,X,XCircle} from 'lucide-react';
 import {supabase} from '@/lib/supabase';
-import {type CRMView,type CRMStage,type CRMOrganization,type CRMPerson,type CRMDeal,type CRMActivity,type CRMDealEvent,type ActivityType,type DealStatus,type DealDraft,type ActivityDraft,stageDefaults,types,emptyDeal,emptyOrg,emptyPerson,emptyActivity,currency,dateFmt,localInput,localTomorrow,isLate,isToday,dealDay,dayToIso,currentSaoPauloDay} from './types';
+import {type CRMView,type CRMStage,type CRMOrganization,type CRMPerson,type CRMDeal,type CRMActivity,type CRMDealEvent,type CRMRecurringPayment,type ActivityType,type DealStatus,type DealDraft,type ActivityDraft,stageDefaults,types,emptyDeal,emptyOrg,emptyPerson,emptyActivity,currency,dateFmt,localInput,localTomorrow,isLate,isToday,currentSaoPauloDay} from './types';
 
 type Props={view:CRMView;userId:string;onMetricsChanged:()=>void};
 type ContactKind='organizations'|'people';
@@ -21,7 +21,7 @@ function initialActivity():ActivityDraft{return {...emptyActivity,due_at:localTo
 function weekDate(d:Date){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
 export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
- const [stages,setStages]=useState<CRMStage[]>([]),[organizations,setOrganizations]=useState<CRMOrganization[]>([]),[people,setPeople]=useState<CRMPerson[]>([]),[deals,setDeals]=useState<CRMDeal[]>([]),[activities,setActivities]=useState<CRMActivity[]>([]),[events,setEvents]=useState<CRMDealEvent[]>([]);
+ const [stages,setStages]=useState<CRMStage[]>([]),[organizations,setOrganizations]=useState<CRMOrganization[]>([]),[people,setPeople]=useState<CRMPerson[]>([]),[deals,setDeals]=useState<CRMDeal[]>([]),[activities,setActivities]=useState<CRMActivity[]>([]),[events,setEvents]=useState<CRMDealEvent[]>([]),[payments,setPayments]=useState<CRMRecurringPayment[]>([]);
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const [query,setQuery]=useState(''),[status,setStatus]=useState<DealStatus>('open'),[dragId,setDragId]=useState(''),[dragOver,setDragOver]=useState('');
  const [dealOpen,setDealOpen]=useState(false),[editingDeal,setEditingDeal]=useState<CRMDeal|null>(null),[dealForm,setDealForm]=useState<DealDraft>(initialDeal());
@@ -29,20 +29,21 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const [contactModal,setContactModal]=useState<ContactKind|null>(null),[contactEditId,setContactEditId]=useState<string|null>(null),[orgForm,setOrgForm]=useState({...emptyOrg}),[personForm,setPersonForm]=useState({...emptyPerson});
  const [activityModal,setActivityModal]=useState(false),[editingActivity,setEditingActivity]=useState<CRMActivity|null>(null),[activityForm,setActivityForm]=useState<ActivityDraft>(initialActivity()),[activityFilter,setActivityFilter]=useState<ActivityFilter>('pending'),[calendarMode,setCalendarMode]=useState(false),[calendarDate,setCalendarDate]=useState(new Date());
  const [stageModal,setStageModal]=useState(false),[stageEdit,setStageEdit]=useState<CRMStage|null>(null),[stageTitle,setStageTitle]=useState(''),[stageProbability,setStageProbability]=useState(50);
- const [lostDeal,setLostDeal]=useState<CRMDeal|null>(null),[lostReason,setLostReason]=useState(''),[lostDate,setLostDate]=useState(currentSaoPauloDay());
- const [wonDeal,setWonDeal]=useState<CRMDeal|null>(null),[wonDate,setWonDate]=useState(currentSaoPauloDay());
+ const [lostDeal,setLostDeal]=useState<CRMDeal|null>(null),[lostReason,setLostReason]=useState('');
+ const [paymentDeal,setPaymentDeal]=useState<CRMDeal|null>(null),[paymentMonth,setPaymentMonth]=useState(currentSaoPauloDay().slice(0,7)),[paymentDate,setPaymentDate]=useState(currentSaoPauloDay()),[paymentAmount,setPaymentAmount]=useState(''),[paymentNotes,setPaymentNotes]=useState('');
  const reload=useCallback(async()=>{
   if(!supabase)return;
   setLoading(true);
-  const [s,o,p,d,a,h]=await Promise.all([
+  const [s,o,p,d,a,h,r]=await Promise.all([
    supabase.from('crm_stages').select('*').order('position'),
    supabase.from('crm_organizations').select('*').order('name'),
    supabase.from('crm_people').select('*').order('name'),
    supabase.from('crm_deals').select('*').order('created_at',{ascending:false}),
    supabase.from('crm_activities').select('*').order('due_at'),
-   supabase.from('crm_deal_events').select('*').order('created_at',{ascending:false}).limit(300)
+   supabase.from('crm_deal_events').select('*').order('created_at',{ascending:false}).limit(300),
+   supabase.from('crm_recurring_payments').select('*').order('paid_at',{ascending:false})
   ]);
-  const error=s.error||o.error||p.error||d.error||a.error||h.error;
+  const error=s.error||o.error||p.error||d.error||a.error||h.error||r.error;
   if(error){setNotice('Falha ao carregar o CRM: '+error.message);setLoading(false);return}
   let stageList=(s.data||[]) as CRMStage[];
   if(!stageList.length){
@@ -51,7 +52,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
    if(again.error)setNotice('Não foi possível criar as etapas: '+again.error.message);
    stageList=(again.data||[]) as CRMStage[];
   }
-  setStages(stageList);setOrganizations((o.data||[]) as CRMOrganization[]);setPeople((p.data||[]) as CRMPerson[]);setDeals((d.data||[]) as CRMDeal[]);setActivities((a.data||[]) as CRMActivity[]);setEvents((h.data||[]) as CRMDealEvent[]);setLoading(false);
+  setStages(stageList);setOrganizations((o.data||[]) as CRMOrganization[]);setPeople((p.data||[]) as CRMPerson[]);setDeals((d.data||[]) as CRMDeal[]);setActivities((a.data||[]) as CRMActivity[]);setEvents((h.data||[]) as CRMDealEvent[]);setPayments((r.data||[]) as CRMRecurringPayment[]);setLoading(false);
  },[userId]);
  useEffect(()=>{void reload()},[reload]);
  useEffect(()=>{setQuery('')},[view]);
@@ -64,44 +65,27 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
  const who=(d:CRMDeal)=>org(d.organization_id)?.name||person(d.person_id)?.name||'Contato não vinculado';
  const logEvent=async(id:string,kind:string,detail:string)=>{if(supabase)await supabase.from('crm_deal_events').insert({user_id:userId,deal_id:id,kind,detail})};
  const createDeal=(stageId?:string)=>{setEditingDeal(null);setDealForm({...initialDeal(),stage_id:stageId||stages[0]?.id||''});setDealOpen(true)};
- const askWon=(d:CRMDeal)=>{setWonDeal(d);setWonDate(currentSaoPauloDay())};
- const askLost=(d:CRMDeal)=>{setLostDeal(d);setLostReason('');setLostDate(currentSaoPauloDay())};
- const openDeal=(d:CRMDeal)=>{setEditingDeal(d);setDealForm({title:d.title,stage_id:d.stage_id,organization_id:d.organization_id||'',person_id:d.person_id||'',setup_value:String(d.setup_value),monthly_value:String(d.monthly_value),expected_close:d.expected_close||'',won_date:dealDay(d.won_at),lost_date:dealDay(d.lost_at),meeting_scheduled_at:d.meeting_scheduled_at?localInput(d.meeting_scheduled_at):'',meeting_held_at:d.meeting_held_at?localInput(d.meeting_held_at):'',label:d.label||'',notes:d.notes||''});setDealOpen(true)};
+ const askLost=(d:CRMDeal)=>{setLostDeal(d);setLostReason('')};
+ const openDeal=(d:CRMDeal)=>{setEditingDeal(d);setDealForm({title:d.title,stage_id:d.stage_id,organization_id:d.organization_id||'',person_id:d.person_id||'',setup_value:String(d.setup_value),monthly_value:String(d.monthly_value),expected_close:d.expected_close||'',label:d.label||'',notes:d.notes||''});setDealOpen(true)};
  const saveDeal=async(e:FormEvent)=>{
   e.preventDefault();if(!supabase||busy)return;
   if(!dealForm.title.trim()||!dealForm.stage_id){setNotice('Preencha o título e a etapa.');return}
   if([dealForm.setup_value,dealForm.monthly_value].some(x=>Number.isNaN(Number(x||0))||Number(x||0)<0)){setNotice('Valores devem ser positivos.');return}
-  if(editingDeal?.status==='won'&&!dealForm.won_date){setNotice('Informe a data do ganho antes de salvar.');return}
-  if(editingDeal?.status==='lost'&&!dealForm.lost_date){setNotice('Informe a data da perda antes de salvar.');return}
   setBusy(true);
-  const payload={user_id:userId,title:dealForm.title.trim(),stage_id:dealForm.stage_id,organization_id:selectValue(dealForm.organization_id),person_id:selectValue(dealForm.person_id),setup_value:Number(dealForm.setup_value||0),monthly_value:Number(dealForm.monthly_value||0),expected_close:selectValue(dealForm.expected_close),meeting_scheduled_at:dealForm.meeting_scheduled_at?new Date(dealForm.meeting_scheduled_at).toISOString():null,meeting_held_at:dealForm.meeting_held_at?new Date(dealForm.meeting_held_at).toISOString():null,label:selectValue(dealForm.label),notes:selectValue(dealForm.notes),updated_at:new Date().toISOString(),
-    ...(editingDeal?.status==='won'?{won_at:dayToIso(dealForm.won_date)}:{}),
-    ...(editingDeal?.status==='lost'?{lost_at:dayToIso(dealForm.lost_date)}:{})
-  };
-  const result=editingDeal?await supabase.from('crm_deals').update(payload).eq('id',editingDeal.id).select('*').single():await supabase.from('crm_deals').insert(payload).select('*').single();
+  const payload={user_id:userId,title:dealForm.title.trim(),stage_id:dealForm.stage_id,organization_id:selectValue(dealForm.organization_id),person_id:selectValue(dealForm.person_id),setup_value:Number(dealForm.setup_value||0),monthly_value:Number(dealForm.monthly_value||0),expected_close:selectValue(dealForm.expected_close),label:selectValue(dealForm.label),notes:selectValue(dealForm.notes),updated_at:new Date().toISOString()};
+   const result=editingDeal?await supabase.from('crm_deals').update(payload).eq('id',editingDeal.id).select('*').single():await supabase.from('crm_deals').insert(payload).select('*').single();
   setBusy(false);if(result.error||!result.data){setNotice('Erro ao salvar negócio: '+result.error?.message);return}
-  await logEvent(result.data.id,editingDeal?'updated':'created',editingDeal?'Dados e datas do negócio atualizados':'Negócio criado');
+  await logEvent(result.data.id,editingDeal?'updated':'created',editingDeal?'Negócio atualizado':'Negócio criado');
   setEditingDeal(result.data as CRMDeal);setNotice('Negócio salvo com sucesso.');await updated();
  };
- const changeStatus=async(d:CRMDeal,next:DealStatus,reason='',selectedDay='')=>{
-  if(!supabase||busy)return;
-  const closeDay=selectedDay||currentSaoPauloDay();
-  if((next==='won'||next==='lost')&&!/^\d{4}-\d{2}-\d{2}$/.test(closeDay)){setNotice('Selecione uma data de fechamento válida.');return}
-  setBusy(true);
+ const changeStatus=async(d:CRMDeal,next:DealStatus,reason='')=>{
+  if(!supabase||busy)return;setBusy(true);
   const now=new Date().toISOString();
-  const result=await supabase.from('crm_deals').update({
-   status:next,
-   won_at:next==='won'?dayToIso(closeDay):null,
-   lost_at:next==='lost'?dayToIso(closeDay):null,
-   lost_reason:next==='lost'?reason:null,
-   updated_at:now
-  }).eq('id',d.id).eq('user_id',userId);
-  setBusy(false);
-  if(result.error){setNotice('Não foi possível alterar o negócio: '+result.error.message);return}
-  await logEvent(d.id,next==='won'?'won':next==='lost'?'lost':'reopened',next==='won'?'Negócio ganho em '+closeDay:next==='lost'?'Negócio perdido em '+closeDay+(reason?' — '+reason:''):'Negócio reaberto');
-  setLostDeal(null);setWonDeal(null);setDealOpen(false);setDragId('');
-  setStatus(next);
-  setNotice(next==='won'?'Negócio ganho! As métricas considerarão a data escolhida.':next==='lost'?'Negócio registrado como perdido.':'Negócio reaberto.');
+  const result=await supabase.from('crm_deals').update({status:next,won_at:next==='won'?now:null,lost_at:next==='lost'?now:null,lost_reason:next==='lost'?reason:null,updated_at:now}).eq('id',d.id).eq('user_id',userId);
+  setBusy(false);if(result.error){setNotice(result.error.message);return}
+  await logEvent(d.id,next==='won'?'won':next==='lost'?'lost':'reopened',next==='won'?'Negócio ganho':next==='lost'?'Negócio perdido'+(reason?' — '+reason:''):'Negócio reaberto');
+  setLostDeal(null);setDealOpen(false);setDragId('');setStatus(next);
+  setNotice(next==='won'?'Negócio marcado como ganho. Métricas atualizadas.':next==='lost'?'Negócio registrado como perdido.':'Negócio reaberto.');
   await updated();
  };
  const moveDeal=async(d:CRMDeal,target:string)=>{
@@ -112,7 +96,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
   await updated();
  };
  const onDropStage=async(e:DragEvent<HTMLElement>,target:string)=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);if(d)await moveDeal(d,target)};
- const onDropStatus=async(e:DragEvent<HTMLElement>,s:'won'|'lost')=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);setDragId('');if(!d)return;if(s==='won')askWon(d);else askLost(d)};
+ const onDropStatus=async(e:DragEvent<HTMLElement>,s:'won'|'lost')=>{e.preventDefault();const d=deal(e.dataTransfer.getData('text/plain')||dragId);setDragId('');if(!d)return;if(s==='won')await changeStatus(d,'won');else askLost(d)};
  const deleteDeal=async(d:CRMDeal)=>{if(!supabase||!window.confirm('Excluir definitivamente "'+d.title+'"?'))return;const{error}=await supabase.from('crm_deals').delete().eq('id',d.id);if(error){setNotice(error.message);return}setDealOpen(false);await updated()};
  const newContact=(kind:ContactKind)=>{setContactModal(kind);setContactEditId(null);setOrgForm({...emptyOrg});setPersonForm({...emptyPerson})};
  const editContact=(kind:ContactKind,id:string)=>{setContactModal(kind);setContactEditId(id);if(kind==='organizations'){const c=org(id);if(c)setOrgForm({name:c.name,email:c.email||'',phone:c.phone||'',website:c.website||'',industry:c.industry||'',notes:c.notes||''})}else{const p=person(id);if(p)setPersonForm({name:p.name,email:p.email||'',phone:p.phone||'',role:p.role||'',notes:p.notes||'',organization_id:p.organization_id||''})}};
@@ -182,7 +166,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
       </article>})}{!cards.length&&<div className="crm-column-empty">Arraste negócios para esta etapa</div>}<button className="crm-column-add" onClick={()=>createDeal(s.id)}><Plus size={17}/> Adicionar negócio</button></div>
     </div>})}</div></div>
     {dragId&&<div className="crm-drop-results"><div className="won" onDragOver={e=>e.preventDefault()} onDrop={e=>void onDropStatus(e,'won')}><CheckCircle2 size={18}/> Solte para marcar como GANHO</div><div className="lost" onDragOver={e=>e.preventDefault()} onDrop={e=>void onDropStatus(e,'lost')}><XCircle size={18}/> Solte para marcar como PERDIDO</div></div>}
-   </>:visibleDeals.length?<section className="crm-archive-section"><header className="crm-archive-title"><div><h2>{status==='won'?'Negócios ganhos':'Negócios perdidos'}</h2><p>{status==='won'?'Negociações fechadas com sucesso. Clique em qualquer card para editar datas e valores.':'Histórico de negócios perdidos, com acesso aos detalhes e opção de reabrir.'}</p></div><Tag variant={status==='won'?'green':'red'}>{visibleDeals.length} {visibleDeals.length===1?'negócio':'negócios'}</Tag></header><div className="crm-archive">{visibleDeals.map(d=><button key={d.id} onClick={()=>openDeal(d)}><div><Tag variant={status==='won'?'green':'red'}>{status==='won'?'Ganho':'Perdido'}</Tag><h3>{d.title}</h3><p>{who(d)}</p>{d.meeting_held_at&&<p className="crm-archive-meeting"><Calendar size={14}/> Reunião realizada: {dateFmt(d.meeting_held_at,{day:'2-digit',month:'short',year:'numeric'})}</p>}</div><div><b>{currency(Number(d.setup_value))}</b><small>{status==='won'?'Ganho em: ':'Perdido em: '}{dateFmt(status==='won'?d.won_at:d.lost_at,{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Sao_Paulo'})}</small><span className="crm-archive-open"><Edit3 size={14}/> Ver e editar</span></div></button>)}</div></section>:<Empty icon={<Target size={30}/>} title={status==='won'?'Nenhum negócio ganho':status==='lost'?'Nenhum negócio perdido':'Nenhuma negociação encontrada'} subtitle={query?'Tente pesquisar por outro termo.':'Negócios finalizados aparecerão aqui. Você pode alterar o status de qualquer card no funil.'}/>}
+   </>:visibleDeals.length?<section className="crm-archive-section"><header className="crm-archive-title"><div><h2>{status==='won'?'Negócios ganhos':'Negócios perdidos'}</h2><p>{status==='won'?'Negociações fechadas com sucesso. Clique em qualquer negócio para visualizar detalhes.':'Histórico de negócios perdidos, com acesso aos detalhes e opção de reabrir.'}</p></div><Tag variant={status==='won'?'green':'red'}>{visibleDeals.length} {visibleDeals.length===1?'negócio':'negócios'}</Tag></header><div className="crm-archive">{visibleDeals.map(d=><button key={d.id} onClick={()=>openDeal(d)}><div><Tag variant={status==='won'?'green':'red'}>{status==='won'?'Ganho':'Perdido'}</Tag><h3>{d.title}</h3><p>{who(d)}</p></div><div><b>{currency(Number(d.setup_value))}</b><small>{status==='won'?'Ganho em: ':'Perdido em: '}{dateFmt(status==='won'?d.won_at:d.lost_at,{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Sao_Paulo'})}</small><span className="crm-archive-open"><Edit3 size={14}/> Ver e editar</span></div></button>)}</div></section>:<Empty icon={<Target size={30}/>} title={status==='won'?'Nenhum negócio ganho':status==='lost'?'Nenhum negócio perdido':'Nenhuma negociação encontrada'} subtitle={query?'Tente pesquisar por outro termo.':'Negócios finalizados aparecerão aqui. Você pode alterar o status de qualquer card no funil.'}/>}
    <p className="crm-footnote">Arraste os negócios entre as etapas. Clique no card para registrar atividades, marcar como ganho/perdido e atualizar as métricas.</p>
   </>:view==='Clientes'?<>
    <div className="crm-toolbar"><div className="crm-pills"><button className={contactKind==='organizations'?'active':''} onClick={()=>setContactKind('organizations')}><Building2 size={16}/> Empresas <span>{organizations.length}</span></button><button className={contactKind==='people'?'active':''} onClick={()=>setContactKind('people')}><UserRound size={16}/> Pessoas <span>{people.length}</span></button></div><div className="crm-search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone ou e-mail..."/></div></div>
@@ -200,10 +184,6 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
      <Field full name="Nome do negócio"><input required maxLength={180} value={dealForm.title} onChange={e=>setDealForm({...dealForm,title:e.target.value})} placeholder="Ex.: Implantação comercial — Empresa"/></Field>
      <Field name="Etapa"><select value={dealForm.stage_id} required onChange={e=>setDealForm({...dealForm,stage_id:e.target.value})}><option value="">Selecionar...</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name} ({s.probability}%)</option>)}</select></Field>
      <Field name="Fechamento previsto"><input type="date" value={dealForm.expected_close} onChange={e=>setDealForm({...dealForm,expected_close:e.target.value})}/></Field>
-     <Field name="Reunião agendada para"><input type="datetime-local" value={dealForm.meeting_scheduled_at} onChange={e=>setDealForm({...dealForm,meeting_scheduled_at:e.target.value})}/></Field>
-     <Field name="Reunião realizada em"><input type="datetime-local" value={dealForm.meeting_held_at} onChange={e=>setDealForm({...dealForm,meeting_held_at:e.target.value})}/></Field>
-     {editingDeal?.status==='won'&&<Field full name="Data do ganho (histórico)"><input type="date" required value={dealForm.won_date} onChange={e=>setDealForm({...dealForm,won_date:e.target.value})}/><small className="crm-field-hint">As métricas serão atribuídas ao mês escolhido. Para vendas antigas, selecione a data real.</small></Field>}
-     {editingDeal?.status==='lost'&&<Field full name="Data da perda (histórico)"><input type="date" required value={dealForm.lost_date} onChange={e=>setDealForm({...dealForm,lost_date:e.target.value})}/></Field>}
      <Field name="Implantação (R$)"><input type="number" min={0} step="0.01" placeholder="0" value={dealForm.setup_value} onChange={e=>setDealForm({...dealForm,setup_value:e.target.value})}/></Field>
      <Field name="Mensalidade (R$)"><input type="number" min={0} step="0.01" placeholder="0" value={dealForm.monthly_value} onChange={e=>setDealForm({...dealForm,monthly_value:e.target.value})}/></Field>
      <Field name="Empresa"><select value={dealForm.organization_id} onChange={e=>setDealForm({...dealForm,organization_id:e.target.value,person_id:person(dealForm.person_id)?.organization_id===e.target.value?dealForm.person_id:''})}><option value="">Sem empresa</option>{organizations.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button type="button" className="crm-text-button" onClick={()=>newContact('organizations')}><Plus size={14}/> Nova empresa</button></Field>
@@ -211,7 +191,7 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
      <Field name="Etiqueta"><input value={dealForm.label} onChange={e=>setDealForm({...dealForm,label:e.target.value})} placeholder="Ex.: Prospecção"/></Field>
      <Field full name="Observações"><textarea rows={4} value={dealForm.notes} onChange={e=>setDealForm({...dealForm,notes:e.target.value})} placeholder="Necessidades, objeções e próximos passos..."/></Field>
     </div><div className="crm-form-actions"><button type="submit" className="crm-button primary" disabled={busy}><Check size={17}/>{editingDeal?'Salvar negócio':'Criar negócio'}</button></div></form>
-    {editingDeal&&<><div className="crm-result-actions">{editingDeal.status==='open'?<><button className="crm-button success" onClick={()=>askWon(editingDeal)}><CheckCircle2 size={17}/> Ganho</button><button className="crm-button danger" onClick={()=>askLost(editingDeal)}><XCircle size={17}/> Perdido</button></>:<button className="crm-button secondary" onClick={()=>void changeStatus(editingDeal,'open')}><RefreshCw size={17}/> Reabrir</button>}<button className="crm-icon-button destructive" onClick={()=>void deleteDeal(editingDeal)}><Trash2 size={18}/></button></div>
+    {editingDeal&&<><div className="crm-result-actions">{editingDeal.status==='open'?<><button className="crm-button success" onClick={()=>void changeStatus(editingDeal,'won')}><CheckCircle2 size={17}/> Ganho</button><button className="crm-button danger" onClick={()=>askLost(editingDeal)}><XCircle size={17}/> Perdido</button></>:<button className="crm-button secondary" onClick={()=>void changeStatus(editingDeal,'open')}><RefreshCw size={17}/> Reabrir</button>}<button className="crm-icon-button destructive" onClick={()=>void deleteDeal(editingDeal)}><Trash2 size={18}/></button></div>
      <section className="crm-detail-section"><header><h3><CalendarDays size={18}/> Atividades ({linkedActivity(editingDeal.id).length})</h3><button className="crm-button primary small" onClick={()=>newActivity({deal:editingDeal})}><Plus size={16}/> Nova atividade</button></header>{linkedActivity(editingDeal.id).length?linkedActivity(editingDeal.id).map(a=><div className="crm-linked" key={a.id}><button className={'crm-checkbox '+(a.done?'checked':'')} onClick={()=>void toggleActivity(a)}>{a.done&&<Check size={13}/>}</button><button onClick={()=>editActivity(a)}><b className={a.done?'struck':''}>{a.title}</b><span><ActivityTypeIcon type={a.type}/>{labelType(a.type)} · {dateFmt(a.due_at,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span></button><ChevronRight size={16}/></div>):<p className="crm-mini-empty">Nenhuma atividade cadastrada para este negócio.</p>}</section>
      <section className="crm-detail-section"><header><h3><History size={18}/> Histórico</h3></header>{events.filter(x=>x.deal_id===editingDeal.id).length?events.filter(x=>x.deal_id===editingDeal.id).map(x=><div className="crm-event" key={x.id}><i/><div><b>{x.detail||x.kind}</b><small>{dateFmt(x.created_at,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div></div>):<p className="crm-mini-empty">As movimentações aparecerão aqui.</p>}</section>
     </>}
@@ -252,16 +232,9 @@ export default function CRMWorkspace({view,userId,onMetricsChanged}:Props){
    </div><div className="crm-form-actions">{editingActivity&&<button type="button" className="crm-button danger-outline" onClick={()=>void deleteActivity(editingActivity)}><Trash2 size={16}/> Excluir</button>}<button className="crm-button primary" disabled={busy} type="submit"><Check size={16}/> Salvar atividade</button></div></form></Modal>}
   {stageModal&&<Modal title="Etapas do funil" subtitle="Crie etapas e personalize probabilidades" onClose={()=>setStageModal(false)}><div className="crm-stage-list">{stages.map(s=><div className="crm-stage-row" key={s.id}><i style={{background:s.color}}/><b>{s.name}</b><small>{s.probability}%</small><button className="crm-icon-button" onClick={()=>{setStageEdit(s);setStageTitle(s.name);setStageProbability(s.probability)}} title="Editar etapa"><Edit3 size={16}/></button><button className="crm-icon-button destructive" onClick={()=>void deleteStage(s)} title="Excluir etapa vazia"><Trash2 size={16}/></button></div>)}</div><form className="crm-form" onSubmit={saveStage}><h3>{stageEdit?'Editar etapa':'Adicionar etapa'}</h3><div className="crm-form-grid"><Field name="Nome"><input required maxLength={80} value={stageTitle} onChange={e=>setStageTitle(e.target.value)}/></Field><Field name="Probabilidade (%)"><input type="number" min={0} max={100} value={stageProbability} onChange={e=>setStageProbability(Number(e.target.value))}/></Field></div><div className="crm-form-actions">{stageEdit&&<button className="crm-button secondary" type="button" onClick={()=>{setStageEdit(null);setStageTitle('');setStageProbability(50)}}>Cancelar edição</button>}<button className="crm-button primary" disabled={busy} type="submit">{stageEdit?'Salvar':'Adicionar'}</button></div></form></Modal>}
 
-  {wonDeal&&<Modal title="Marcar negócio como ganho" subtitle={wonDeal.title} onClose={()=>setWonDeal(null)}>
-    <div className="crm-close-date-copy"><CheckCircle2 size={20}/><p>Escolha a data real do fechamento. Se foi ganho em setembro, registre o dia correto para atualizar as metas daquele mês.</p></div>
-    <Field name="Data do ganho"><input type="date" required value={wonDate} onChange={e=>setWonDate(e.target.value)}/></Field>
-    <div className="crm-form-actions"><button className="crm-button secondary" onClick={()=>setWonDeal(null)}>Cancelar</button><button className="crm-button success" disabled={busy||!wonDate} onClick={()=>void changeStatus(wonDeal,'won','',wonDate)}><CheckCircle2 size={16}/> Confirmar ganho</button></div>
-   </Modal>}
   {lostDeal&&<Modal title="Marcar como perdido" subtitle={lostDeal.title} onClose={()=>setLostDeal(null)}>
-    <Field name="Data da perda"><input type="date" required value={lostDate} onChange={e=>setLostDate(e.target.value)}/></Field>
-    <div className="crm-field-spacer"/>
     <Field name="Motivo da perda"><textarea rows={4} value={lostReason} onChange={e=>setLostReason(e.target.value)} placeholder="Orçamento, concorrente, momento..."/></Field>
-    <div className="crm-form-actions"><button className="crm-button secondary" onClick={()=>setLostDeal(null)}>Cancelar</button><button className="crm-button danger" disabled={busy||!lostDate} onClick={()=>void changeStatus(lostDeal,'lost',lostReason,lostDate)}><XCircle size={16}/> Confirmar perda</button></div>
-   </Modal>}
+    <div className="crm-form-actions"><button className="crm-button secondary" onClick={()=>setLostDeal(null)}>Cancelar</button><button className="crm-button danger" disabled={busy} onClick={()=>void changeStatus(lostDeal,'lost',lostReason)}><XCircle size={16}/> Confirmar perda</button></div>
+   </Modal>
  </div>
 }

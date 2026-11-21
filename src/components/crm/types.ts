@@ -7,6 +7,7 @@ export type CRMPerson={id:string;user_id:string;organization_id:string|null;name
 export type CRMDeal={id:string;user_id:string;title:string;stage_id:string;organization_id:string|null;person_id:string|null;setup_value:number;monthly_value:number;status:DealStatus;won_at:string|null;lost_at:string|null;lost_reason:string|null;meeting_scheduled_at:string|null;meeting_held_at:string|null;expected_close:string|null;label:string|null;notes:string|null;position:number;created_at:string;updated_at:string};
 export type CRMActivity={id:string;user_id:string;title:string;type:ActivityType;description:string|null;due_at:string;duration_minutes:number;done:boolean;done_at:string|null;deal_id:string|null;person_id:string|null;organization_id:string|null;created_at:string};
 export type CRMDealEvent={id:string;user_id:string;deal_id:string;kind:string;detail:string|null;created_at:string};
+export type CRMRecurringPayment={id:string;user_id:string;deal_id:string;reference_month:string;paid_at:string;amount:number;notes:string|null;created_at:string};
 export const types:{key:ActivityType;label:string;icon:string}[]=[
  {key:'call',label:'Ligação',icon:'phone'},
  {key:'meeting',label:'Reunião',icon:'users'},
@@ -23,7 +24,7 @@ export const stageDefaults=[
  {name:'Proposta enviada',probability:65,color:'#d7a54d'},
  {name:'Negociação',probability:85,color:'#9e77f5'}
 ];
-export const emptyDeal={title:'',stage_id:'',organization_id:'',person_id:'',setup_value:'',monthly_value:'',expected_close:'',won_date:'',lost_date:'',meeting_scheduled_at:'',meeting_held_at:'',label:'',notes:''};
+export const emptyDeal={title:'',stage_id:'',organization_id:'',person_id:'',setup_value:'',monthly_value:'',expected_close:'',label:'',notes:''};
 export type DealDraft=typeof emptyDeal;
 export const emptyOrg={name:'',email:'',phone:'',website:'',industry:'',notes:''};
 export const emptyPerson={name:'',email:'',phone:'',role:'',notes:'',organization_id:''};

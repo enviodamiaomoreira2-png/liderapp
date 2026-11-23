@@ -188,7 +188,7 @@ export default function Home(){
     <div className="topbar-right">
           {activeTab==='Métricas e Metas'&&<div className="topbar-controls">
       <div className="period-filter" aria-label="Filtro de período">
-       <label className="period-granularity" title="Agrupamento das métricas">
+       <label className={"period-granularity"+(periodUnit==='all'?' is-all':'')} title="Agrupamento das métricas">
         <select aria-label="Tipo de período" value={periodUnit} onChange={e=>choosePeriod(e.target.value as PeriodUnit)}>
          <option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option><option value="all">Todo o período</option>
         </select><ChevronDown size={14}/>

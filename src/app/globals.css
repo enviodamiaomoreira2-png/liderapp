@@ -130,3 +130,65 @@
 @media(min-width:1350px){.metrics-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(min-width:1000px) and (max-width:1349px){.metrics-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics-grid .kpi-total{grid-column:span 2}}
 @media(max-width:999px){.metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metrics-grid .kpi-total{grid-column:span 2}}
+
+
+/* Calendar filters: day, week, month, year, unrestricted historical navigation */
+.topbar{height:auto;min-height:74px;flex-wrap:wrap;row-gap:9px;padding-top:9px;padding-bottom:9px}
+.topbar-right{flex:1;justify-content:flex-end;flex-wrap:wrap}
+.topbar-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.period-filter{display:flex;align-items:center;gap:5px;min-height:42px;background:#171728;border:1px solid #39334f;border-radius:10px;padding:4px 7px;color:#c8c1df;max-width:100%}
+.period-granularity,.period-date-entry{height:34px;display:flex;align-items:center;gap:5px;min-width:0}
+.period-granularity{border-right:1px solid #45405d;padding:0 7px 0 4px}
+.period-granularity select{appearance:none;color:#e7dcff;background:none;border:0;outline:none;font-size:13px;font-weight:800;cursor:pointer;max-width:88px;padding:0}
+.period-granularity select option{background:#1a1a2d;color:#f5efff}
+.period-granularity svg{pointer-events:none;color:#b798e9}
+.period-date-entry{padding:0 5px;color:#af9ad6}
+.period-date-entry input{border:0;outline:none;background:transparent;color:#f4eaff;min-width:0;width:148px;height:32px;font-size:13px;font-weight:700;cursor:pointer;color-scheme:dark}
+.period-date-entry input[type="number"]{width:71px;appearance:textfield}
+.period-date-entry input::-webkit-inner-spin-button{display:none}
+.period-arrow{border:0;background:#28223a;color:#c9b4f8;border-radius:7px;min-width:29px;height:31px;display:grid;place-items:center}
+.period-arrow:hover{background:#3b2e58;color:#fff}
+.period-today{border:0;background:#3d2d5b;color:#d3beff;border-radius:7px;font-size:12px;font-weight:800;padding:0 10px;height:31px}
+.period-today:hover{background:#594078}
+.period-readable{display:block;max-width:205px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#aea3c8;font-size:12px;padding-left:5px}
+.kpi-total-lifetime{font-size:11px;color:#ada2c8;border-top:1px solid #4c395f;margin-top:9px;padding-top:8px;line-height:1.5}
+.kpi-total-lifetime b{color:#e4cfff}
+.period-no-target{padding-top:19px;padding-bottom:19px}
+.period-no-target .section-heading{align-items:center}
+@media(max-width:1550px){
+ .period-readable{display:none}
+ .topbar-controls{gap:7px}
+ .period-filter{gap:3px}
+}
+@media(max-width:1330px){
+ .topbar-right{gap:9px}
+ .topbar-controls{order:3;width:100%;flex:0 0 100%;justify-content:flex-end}
+ .topbar-controls .period-filter{flex:1;justify-content:center}
+ .period-readable{display:block}
+}
+@media(max-width:850px){
+ .topbar{height:auto;padding-top:10px;padding-bottom:10px}
+ .topbar-controls{order:3;width:100%;flex:0 0 100%;justify-content:flex-start;flex-wrap:wrap}
+ .topbar-controls .period-filter{flex:1 1 100%;width:100%;justify-content:space-between;min-width:0}
+ .period-readable{display:block;max-width:210px}
+ .topbar-controls .btn{margin-left:auto}
+}
+@media(max-width:620px){
+ .topbar-controls{gap:8px}
+ .period-filter{flex-wrap:wrap}
+ .period-date-entry input{width:128px;font-size:12px}
+ .period-granularity select{font-size:12px}
+ .period-readable{flex:0 0 100%;max-width:none;text-align:center;padding:5px 0 1px;border-top:1px solid #39334f}
+ .period-no-target .section-heading{flex-wrap:wrap}
+ .period-no-target .link-btn{margin-left:54px}
+}
+@media(max-width:390px){
+ .period-filter{padding:5px 4px}
+ .period-date-entry input{width:116px;font-size:11px}
+ .period-date-entry{padding:0 2px}
+ .period-arrow{min-width:25px}
+ .period-today{padding:0 6px;font-size:11px}
+ .period-granularity{padding-right:3px;padding-left:2px}
+ .period-granularity select{max-width:64px}
+ .topbar-controls .btn{width:100%;justify-content:center}
+}

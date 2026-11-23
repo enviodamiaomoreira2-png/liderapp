@@ -199,3 +199,9 @@
 @keyframes metric-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 .period-date-entry .period-year-input{width:66px;text-align:center;letter-spacing:.3px;font-variant-numeric:tabular-nums}
+
+
+/* Keep the full-history filter readable; no total-lifetime duplicate in date views */
+.period-granularity.is-all select{max-width:none;width:125px}
+.period-filter:has(.period-granularity.is-all){justify-content:flex-start}
+@media(max-width:390px){.period-granularity.is-all select{max-width:none;width:124px}}

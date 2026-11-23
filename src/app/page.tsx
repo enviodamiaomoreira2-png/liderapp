@@ -1,5 +1,5 @@
 'use client';
-import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Activity,ArrowRight,Bell,BriefcaseBusiness,CalendarDays,Check,CheckCheck,ChevronDown,ChevronLeft,ChevronRight,CircleCheck,ClipboardCheck,FileText,Goal,LayoutDashboard,LockKeyhole,LogOut,Menu,Plus,Settings2,Target,TrendingUp,Users,Wallet, X, Zap} from 'lucide-react';
 import {ResponsiveContainer,AreaChart,Area,CartesianGrid,XAxis,YAxis,Tooltip,BarChart,Bar} from 'recharts';
 import {supabase} from '@/lib/supabase';
@@ -37,6 +37,8 @@ export default function Home(){
  const [rawPayments,setRawPayments]=useState<PaidMetric[]>([]);
  const [hasPeriodData,setHasPeriodData]=useState(false);
  const [configuredMonths,setConfiguredMonths]=useState(0);
+ const [metricsLoading,setMetricsLoading]=useState(false);
+ const metricsRequestId=useRef(0);
  const [cumulativeRevenue,setCumulativeRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
  const [periodRevenue,setPeriodRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
  const [editOpen,setEditOpen]=useState(false),[goalDraft,setGoalDraft]=useState<GoalRow>(blankGoal),[resultDraft,setResultDraft]=useState<ResultRow>(blankResult(getMonth())),[actionText,setActionText]=useState('');
@@ -46,11 +48,13 @@ export default function Home(){
  const toggleSidebar=()=>{const next=!sidebarHidden;setSidebarHidden(next);try{window.localStorage.setItem('liderapp-sidebar-hidden',String(next))}catch{}};
 
  const load=useCallback(async(u:User|null,m:string)=>{
+  const requestId=++metricsRequestId.current;
   if(!supabase||!u){
    setGoals(blankGoal);setHistory([]);setActions([]);setManualResult(blankResult(m));setResult(blankResult(m));
    setMonthlyGoals([]);setMonthlyManual([]);setRawWins([]);setRawPayments([]);setHasPeriodData(false);
-   setCumulativeRevenue(null);setPeriodRevenue(null);setConfiguredMonths(0);return;
+   setCumulativeRevenue(null);setPeriodRevenue(null);setConfiguredMonths(0);setMetricsLoading(false);return;
   }
+  setMetricsLoading(true);
   const beforeEnd=startTimestamp(period.end);
   const [goalsResponse,resultsResponse,actionsResponse]=await Promise.all([
    supabase.from('monthly_goals').select('month,contracts_target,setup_revenue_target,new_mrr_target').eq('user_id',u.id).gte('month',period.start.slice(0,4)+'-01-01').lt('month',period.end).order('month'),
@@ -58,22 +62,23 @@ export default function Home(){
    supabase.from('action_items').select('id,title,completed').eq('user_id',u.id).eq('month',m).order('created_at',{ascending:true})
   ]);
   const firstError=goalsResponse.error||resultsResponse.error||actionsResponse.error;
-  if(firstError){alert('Não foi possível consultar as métricas: '+firstError.message);return}
+  if(firstError){if(requestId===metricsRequestId.current){alert('Não foi possível consultar as métricas: '+firstError.message);setMetricsLoading(false)}return}
   // Fetch the complete historical ledger (Supabase's Data API may cap each page at 1000 rows).
   const wins:DealMetric[]=[];
   const payments:PaidMetric[]=[];
   for(let offset=0;offset<1000000;offset+=1000){
    const r=await supabase.from('crm_deals').select('won_at,setup_value,monthly_value').eq('user_id',u.id).eq('status','won').not('won_at','is',null).lt('won_at',beforeEnd).order('won_at').range(offset,offset+999);
-   if(r.error){alert('Não foi possível consultar os negócios ganhos: '+r.error.message);return}
+   if(r.error){if(requestId===metricsRequestId.current){alert('Não foi possível consultar os negócios ganhos: '+r.error.message);setMetricsLoading(false)}return}
    wins.push(...((r.data||[]) as DealMetric[]));
    if(!r.data||r.data.length<1000)break;
   }
   for(let offset=0;offset<1000000;offset+=1000){
    const r=await supabase.from('crm_recurring_payments').select('paid_at,amount').eq('user_id',u.id).lt('paid_at',period.end).order('paid_at').range(offset,offset+999);
-   if(r.error){alert('Não foi possível consultar as mensalidades pagas: '+r.error.message);return}
+   if(r.error){if(requestId===metricsRequestId.current){alert('Não foi possível consultar as mensalidades pagas: '+r.error.message);setMetricsLoading(false)}return}
    payments.push(...((r.data||[]) as PaidMetric[]));
    if(!r.data||r.data.length<1000)break;
   }
+  if(requestId!==metricsRequestId.current)return;
   const allManual=((resultsResponse.data||[]) as ResultRow[]).map(r=>({
    ...r,contracts_count:num(r.contracts_count),setup_revenue:num(r.setup_revenue),new_mrr:num(r.new_mrr)
   }));
@@ -118,6 +123,7 @@ export default function Home(){
    monthlyMap.set(target,{...r,contracts_count:r.contracts_count+1,setup_revenue:r.setup_revenue+num(d.setup_value),new_mrr:r.new_mrr+num(d.monthly_value)});
   }
   setHistory(Array.from(monthlyMap.values()).sort((a,b)=>a.month.localeCompare(b.month)));
+  setMetricsLoading(false);
  },[period,periodUnit]);
  useEffect(()=>{if(!supabase){setAuthChecking(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setAuthChecking(false)});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!authChecking&&activeTab==='Métricas e Metas')void load(user,month)},[user,month,authChecking,load,activeTab]);
@@ -206,6 +212,7 @@ export default function Home(){
    </header>
    <div className="page-body">
    {activeTab==='Métricas e Metas'?<>
+   {metricsLoading&&<div className="metric-fetch-status" role="status"><Activity size={15}/> Atualizando indicadores para {period.label}…</div>}
    {notice&&<div className="notice"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
       <div className="metrics-grid"><section className="card kpi kpi-total"><div className="kpi-top"><span className="muted">Faturamento total</span><Wallet size={22} className="purple"/></div><strong>{periodRevenue?formatMoney(periodRevenue.total):'—'}</strong><div className="kpi-total-breakdown">{periodRevenue?<><span>Setups ganhos: <b>{formatMoney(periodRevenue.setup)}</b></span><span>Mensalidades pagas: <b>{formatMoney(periodRevenue.paid)}</b></span></>:'Nenhum recebimento ou setup ganho neste período'}</div><div className="kpi-total-month">Período: {period.label}</div><div className="kpi-total-lifetime">Acumulado até aqui: <b>{cumulativeRevenue?formatMoney(cumulativeRevenue.total):'—'}</b></div></section><Kpi title="Contratos fechados" value={hasResult?String(result.contracts_count):'—'} sub={'No período selecionado'} Icon={FileText}/><Kpi title="Receita de implantação" value={hasResult?formatMoney(result.setup_revenue):'—'} sub="Valor contratado no período" Icon={Wallet}/><Kpi title="Novo MRR" value={hasResult?formatMoney(result.new_mrr):'—'} sub="Recorrência adicionada no período" Icon={TrendingUp}/><Kpi title="ARR equivalente do novo MRR" value={hasResult?formatMoney(result.new_mrr*12):'—'} sub="Anualização, não garantida" Icon={Activity}/></div>
    {periodUnit==='day'||periodUnit==='week'?<section className="card goals-card period-no-target"><div className="section-heading"><div className="heading-icon"><Target size={22}/></div><div><h2>Metas mensais</h2><p>As metas são configuradas por mês. Não dividimos uma meta mensal artificialmente por dias ou semanas.</p></div><button className="link-btn" onClick={()=>setPeriodUnit('month')}>Ver metas do mês <ArrowRight size={15}/></button></div></section>:

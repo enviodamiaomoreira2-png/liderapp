@@ -27,7 +27,7 @@ function MiniProgress({name,value,target,unit=''}:{name:string;value:number;targ
 }
 export default function Home(){
  const [user,setUser]=useState<User|null>(null),[authChecking,setAuthChecking]=useState(true),[authOpen,setAuthOpen]=useState(false),[authMode,setAuthMode]=useState<'login'|'signup'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
- const [periodUnit,setPeriodUnit]=useState<PeriodUnit>('month'),[anchorDay,setAnchorDay]=useState(saoPauloDate());
+ const [periodUnit,setPeriodUnit]=useState<PeriodUnit>('month'),[anchorDay,setAnchorDay]=useState(saoPauloDate()),[yearDraft,setYearDraft]=useState(saoPauloDate().slice(0,4));
  const month=monthOf(anchorDay);
  const period=useMemo(()=>getPeriod(periodUnit,anchorDay),[periodUnit,anchorDay]);
  const [goals,setGoals]=useState<GoalRow>(blankGoal),[result,setResult]=useState<ResultRow>(blankResult(getMonth())),[manualResult,setManualResult]=useState<ResultRow>(blankResult(getMonth())),[history,setHistory]=useState<ResultRow[]>([]),[actions,setActions]=useState<ActionRow[]>([]);
@@ -128,6 +128,8 @@ export default function Home(){
  useEffect(()=>{if(!supabase){setAuthChecking(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setAuthChecking(false)});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!authChecking&&activeTab==='Métricas e Metas')void load(user,month)},[user,month,authChecking,load,activeTab]);
  const isLogged=!!user;
+ useEffect(()=>{setYearDraft(anchorDay.slice(0,4))},[anchorDay]);
+ const commitYear=()=>{const y=Number(yearDraft);if(Number.isInteger(y)&&y>=1&&y<=9998)setAnchorDay(String(y).padStart(4,'0')+anchorDay.slice(4));else setYearDraft(anchorDay.slice(0,4))};
  const choosePeriod=(unit:PeriodUnit)=>{setPeriodUnit(unit)};
  const movePeriod=(direction:number)=>setAnchorDay(day=>stepPeriod(periodUnit,day,direction));
  const jumpToday=()=>setAnchorDay(saoPauloDate());
@@ -195,7 +197,7 @@ export default function Home(){
        <label className="period-date-entry" title={period.label}>
         <CalendarDays size={17}/>
         {periodUnit==='year'?
-          <input type="number" min={1} max={9998} aria-label="Selecionar ano" value={Number(anchorDay.slice(0,4))} onChange={e=>{const year=Number(e.target.value);if(year>=1&&year<=9998)setAnchorDay(String(year).padStart(4,'0')+anchorDay.slice(4))}}/>:
+          <input className="period-year-input" type="text" inputMode="numeric" maxLength={4} aria-label="Selecionar ano" value={yearDraft} onChange={e=>setYearDraft(e.target.value.replace(/\D/g,'').slice(0,4))} onBlur={commitYear} onKeyDown={e=>{if(e.key==='Enter'){e.currentTarget.blur()}}}/>:
          <input type={periodUnit==='month'?'month':'date'} aria-label={periodUnit==='month'?'Selecionar mês':'Selecionar data'} value={periodUnit==='month'?month.slice(0,7):anchorDay} onChange={e=>{const next=e.target.value;if(next)setAnchorDay(periodUnit==='month'?next+'-01':next)}}/>
         }
        </label>

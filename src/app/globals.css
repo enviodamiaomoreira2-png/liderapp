@@ -262,3 +262,18 @@
  .goals-card.period-no-target .section-heading{align-items:flex-start}
  .goals-card.period-no-target .link-btn{margin-left:0}
 }
+
+
+/* Seven financial and commercial KPIs: balanced dashboard at large breakpoints. */
+@media(min-width:1350px){
+ .metrics-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .metrics-grid .kpi-total{grid-column:span 2}
+}
+@media(min-width:1000px) and (max-width:1349px){
+ .metrics-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .metrics-grid .kpi-total{grid-column:span 2}
+}
+@media(max-width:999px){
+ .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .metrics-grid .kpi-total{grid-column:span 2}
+}

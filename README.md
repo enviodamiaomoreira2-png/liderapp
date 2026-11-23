@@ -32,3 +32,19 @@ Dados de funil, comparativos e projeções são exibidos apenas com registros su
 - O cadastro de etapas padrão é feito apenas como configuração inicial da conta; nenhuma oportunidade, contato ou atividade fictícia é criada.
 - Banco: `supabase/migrations/20261120_create_crm.sql`, aplicado ao projeto Supabase existente.
 - O calendário, o funil e o cadastro já operam sem integrações externas de e-mail/Google Calendar. Sincronização e automações serão etapas opcionais.
+
+## Financeiro — cobranças e MRR recebido
+
+- A aba **Financeiro** apresenta cobranças mensais por negócio, com filtros Pendente, Atrasado, Parcial e Pago, pesquisa, vencimento e mês de referência.
+- Para cada negócio ganho, configure no Financeiro **valor da mensalidade**, **dia de vencimento (1 a 28)** e **mês de início da cobrança**. Nenhum desses valores é presumido; os negócios históricos continuam preservados.
+- **Gerar cobranças** registra as previsões para o mês selecionado, de modo idempotente. Cobranças não são consideradas pagamentos recebidos.
+- **Confirmar recebimento** grava pagamento no livro financeiro crm_recurring_payments, também utilizado pelo Comercial. Pagamento inferior à cobrança resulta em Parcial ou Atrasado (parcial), conforme o vencimento.
+- **MRR contratado** = base mensal informada nos negócios ganhos (previsão contratual; não caixa).
+- **Mensalidades previstas** = valor de cobranças com vencimento no período escolhido.
+- **MRR recebido** = soma de mensalidades efetivamente pagas no período de pagamento; não soma contratos ainda não recebidos.
+- **Novo MRR recebido** = valores dos primeiros pagamentos de cada negócio, alocados à data em que entrou o primeiro pagamento. Meses posteriores do mesmo negócio não são contados como novo MRR.
+- **Faturamento total** = setups ganhos + mensalidades confirmadas como pagas no período; o cálculo dos setups segue a regra da agência e não comprova a quitação bancária.
+- As metas de novo MRR se referem ao novo MRR recebido. Não existem mais lançamentos manuais de novo MRR para evitar duplicações.
+- Pagamentos após o vencimento aparecem no período em que o dinheiro entrou, preservando a cobrança no mês de referência original.
+- **Importante:** geração de cobranças atualmente é feita por **Gerar cobranças**, sem job periódico no servidor nem integração bancária.
+- SQL: supabase/migrations/20261123_recurring_charges_and_billing_terms.sql, com RLS por proprietário.

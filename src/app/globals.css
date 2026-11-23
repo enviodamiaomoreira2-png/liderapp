@@ -192,3 +192,8 @@
  .period-granularity select{max-width:64px}
  .topbar-controls .btn{width:100%;justify-content:center}
 }
+
+
+.metric-fetch-status{display:flex;align-items:center;gap:9px;color:#c6aeff;background:#201a34;border:1px solid #4b386b;border-radius:9px;padding:9px 14px;font-size:12px;margin-bottom:13px}
+.metric-fetch-status svg{animation:metric-pulse 1.2s ease-in-out infinite}
+@keyframes metric-pulse{0%,100%{opacity:1}50%{opacity:.35}}

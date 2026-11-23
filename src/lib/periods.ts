@@ -44,7 +44,7 @@ export const localDay=(timestamp:string)=>saoPauloDate(timestamp);
 export const localHour=(timestamp:string)=>new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).format(new Date(timestamp));
 export const inWindow=(day:string,period:PeriodWindow)=>day>=period.start&&day<period.end;
 export type DealMetric={won_at:string;setup_value:number;monthly_value:number};
-export type PaidMetric={paid_at:string;amount:number};
+export type PaidMetric={deal_id:string;reference_month:string;paid_at:string;amount:number};
 export type ManualMetric={month:string;contracts_count:number;setup_revenue:number;new_mrr:number;leads_count:number|null;meetings_count:number|null;proposals_count:number|null};
 export const num=(v:unknown)=>Number(v)||0;
 export function groupTimeline(unit:PeriodUnit,period:PeriodWindow,wins:DealMetric[],manual:ManualMetric[]){

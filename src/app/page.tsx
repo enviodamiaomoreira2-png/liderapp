@@ -39,7 +39,6 @@ export default function Home(){
  const [configuredMonths,setConfiguredMonths]=useState(0);
  const [metricsLoading,setMetricsLoading]=useState(false);
  const metricsRequestId=useRef(0);
- const [cumulativeRevenue,setCumulativeRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
  const [periodRevenue,setPeriodRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
  const [editOpen,setEditOpen]=useState(false),[goalDraft,setGoalDraft]=useState<GoalRow>(blankGoal),[resultDraft,setResultDraft]=useState<ResultRow>(blankResult(getMonth())),[actionText,setActionText]=useState('');
  const [activeTab,setActiveTab]=useState<Tab>('Métricas e Metas'),[sidebarOpen,setSidebarOpen]=useState(false),[sidebarHidden,setSidebarHidden]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -52,13 +51,13 @@ export default function Home(){
   if(!supabase||!u){
    setGoals(blankGoal);setHistory([]);setActions([]);setManualResult(blankResult(m));setResult(blankResult(m));
    setMonthlyGoals([]);setMonthlyManual([]);setRawWins([]);setRawPayments([]);setHasPeriodData(false);
-   setCumulativeRevenue(null);setPeriodRevenue(null);setConfiguredMonths(0);setMetricsLoading(false);return;
+   setPeriodRevenue(null);setConfiguredMonths(0);setMetricsLoading(false);return;
   }
   setMetricsLoading(true);
-  const beforeEnd=startTimestamp(period.end);
+  const beforeEnd=periodUnit==='all'?null:startTimestamp(period.end);
   const [goalsResponse,resultsResponse,actionsResponse]=await Promise.all([
-   supabase.from('monthly_goals').select('month,contracts_target,setup_revenue_target,new_mrr_target').eq('user_id',u.id).gte('month',period.start.slice(0,4)+'-01-01').lt('month',period.end).order('month'),
-   supabase.from('monthly_results').select('month,contracts_count,setup_revenue,new_mrr,leads_count,meetings_count,proposals_count,notes').eq('user_id',u.id).lt('month',period.end).order('month'),
+   supabase.from('monthly_goals').select('month,contracts_target,setup_revenue_target,new_mrr_target').eq('user_id',u.id).order('month'),
+   supabase.from('monthly_results').select('month,contracts_count,setup_revenue,new_mrr,leads_count,meetings_count,proposals_count,notes').eq('user_id',u.id).order('month'),
    supabase.from('action_items').select('id,title,completed').eq('user_id',u.id).eq('month',m).order('created_at',{ascending:true})
   ]);
   const firstError=goalsResponse.error||resultsResponse.error||actionsResponse.error;
@@ -67,13 +66,17 @@ export default function Home(){
   const wins:DealMetric[]=[];
   const payments:PaidMetric[]=[];
   for(let offset=0;offset<1000000;offset+=1000){
-   const r=await supabase.from('crm_deals').select('won_at,setup_value,monthly_value').eq('user_id',u.id).eq('status','won').not('won_at','is',null).lt('won_at',beforeEnd).order('won_at').range(offset,offset+999);
+   let query=supabase.from('crm_deals').select('won_at,setup_value,monthly_value').eq('user_id',u.id).eq('status','won').not('won_at','is',null).order('won_at').range(offset,offset+999);
+   if(beforeEnd)query=query.lt('won_at',beforeEnd);
+   const r=await query;
    if(r.error){if(requestId===metricsRequestId.current){alert('Não foi possível consultar os negócios ganhos: '+r.error.message);setMetricsLoading(false)}return}
    wins.push(...((r.data||[]) as DealMetric[]));
    if(!r.data||r.data.length<1000)break;
   }
   for(let offset=0;offset<1000000;offset+=1000){
-   const r=await supabase.from('crm_recurring_payments').select('paid_at,amount').eq('user_id',u.id).lt('paid_at',period.end).order('paid_at').range(offset,offset+999);
+   let query=supabase.from('crm_recurring_payments').select('paid_at,amount').eq('user_id',u.id).order('paid_at').range(offset,offset+999);
+   if(periodUnit!=='all')query=query.lt('paid_at',period.end);
+   const r=await query;
    if(r.error){if(requestId===metricsRequestId.current){alert('Não foi possível consultar as mensalidades pagas: '+r.error.message);setMetricsLoading(false)}return}
    payments.push(...((r.data||[]) as PaidMetric[]));
    if(!r.data||r.data.length<1000)break;
@@ -84,7 +87,7 @@ export default function Home(){
   }));
   const allGoals=(goalsResponse.data||[]).map(r=>({month:r.month,contracts_target:num(r.contracts_target),setup_revenue_target:num(r.setup_revenue_target),new_mrr_target:num(r.new_mrr_target)}));
   setMonthlyGoals(allGoals);setMonthlyManual(allManual);setRawWins(wins);setRawPayments(payments);
-  const selectedManual=periodUnit==='month'?allManual.filter(r=>r.month===period.start):periodUnit==='year'?allManual.filter(r=>r.month>=period.start&&r.month<period.end):[];
+  const selectedManual=periodUnit==='all'?allManual:periodUnit==='month'?allManual.filter(r=>r.month===period.start):periodUnit==='year'?allManual.filter(r=>r.month>=period.start&&r.month<period.end):[];
   const selectedWins=wins.filter(d=>inWindow(localDay(d.won_at),period));
   const selectedPayments=payments.filter(p=>inWindow(p.paid_at,period));
   const manualTotal=(field:keyof ResultRow)=>selectedManual.reduce((sum,r)=>sum+num(r[field]),0);
@@ -97,10 +100,10 @@ export default function Home(){
    meetings_count:periodUnit==='month'&&selectedManual.length&&selectedManual[0].meetings_count!==null?selectedManual[0].meetings_count:null,
    proposals_count:periodUnit==='month'&&selectedManual.length&&selectedManual[0].proposals_count!==null?selectedManual[0].proposals_count:null
   };
-  if(periodUnit==='year'&&selectedManual.length===12&&selectedManual.every(r=>r.leads_count!==null&&r.meetings_count!==null&&r.proposals_count!==null)){
+  if((periodUnit==='all'||(periodUnit==='year'&&selectedManual.length===12))&&selectedManual.length>0&&selectedManual.every(r=>r.leads_count!==null&&r.meetings_count!==null&&r.proposals_count!==null)){
    selectedResult.leads_count=manualTotal('leads_count');selectedResult.meetings_count=manualTotal('meetings_count');selectedResult.proposals_count=manualTotal('proposals_count');
   }
-  const selectedGoalRows=periodUnit==='year'?allGoals.filter(r=>r.month>=period.start&&r.month<period.end):
+  const selectedGoalRows=periodUnit==='all'?allGoals:periodUnit==='year'?allGoals.filter(r=>r.month>=period.start&&r.month<period.end):
    periodUnit==='month'?allGoals.filter(r=>r.month===period.start):[];
   const currentGoals:GoalRow=selectedGoalRows.reduce((sum,r)=>({
    contracts_target:sum.contracts_target+r.contracts_target,
@@ -109,10 +112,7 @@ export default function Home(){
   }),{...blankGoal});
   const inSetup=selectedWins.reduce((sum,d)=>sum+num(d.setup_value),0);
   const inPaid=selectedPayments.reduce((sum,p)=>sum+num(p.amount),0);
-  const totalSetup=wins.reduce((sum,d)=>sum+num(d.setup_value),0);
-  const totalPaid=payments.reduce((sum,p)=>sum+num(p.amount),0);
   setPeriodRevenue(selectedWins.length||selectedPayments.length?{setup:inSetup,paid:inPaid,total:inSetup+inPaid}:null);
-  setCumulativeRevenue(wins.length||payments.length?{setup:totalSetup,paid:totalPaid,total:totalSetup+totalPaid}:null);
   setGoals(currentGoals);setConfiguredMonths(selectedGoalRows.length);
   setHasPeriodData(selectedWins.length>0||selectedPayments.length>0||selectedManual.length>0);
   setManualResult(allManual.find(r=>r.month===m)||blankResult(m));
@@ -190,9 +190,10 @@ export default function Home(){
       <div className="period-filter" aria-label="Filtro de período">
        <label className="period-granularity" title="Agrupamento das métricas">
         <select aria-label="Tipo de período" value={periodUnit} onChange={e=>choosePeriod(e.target.value as PeriodUnit)}>
-         <option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option>
+         <option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option><option value="all">Todo o período</option>
         </select><ChevronDown size={14}/>
        </label>
+       {periodUnit!=='all'&&<>
        <button className="period-arrow" onClick={()=>movePeriod(-1)} aria-label="Período anterior" title="Período anterior"><ChevronLeft size={19}/></button>
        <label className="period-date-entry" title={period.label}>
         <CalendarDays size={17}/>
@@ -203,6 +204,7 @@ export default function Home(){
        </label>
        <button className="period-arrow" onClick={()=>movePeriod(1)} aria-label="Próximo período" title="Próximo período"><ChevronRight size={19}/></button>
        <button className="period-today" onClick={jumpToday}>Hoje</button>
+       </>}
        <span className="period-readable" title={period.label}>{period.label}</span>
       </div>
       <button className="btn purple-btn" onClick={()=>{setGoalDraft(monthlyGoals.find(r=>r.month===month)||{...blankGoal});setResultDraft({...manualResult});setEditOpen(true)}}><Settings2 size={17}/> Gerenciar metas</button>
@@ -216,10 +218,10 @@ export default function Home(){
    {activeTab==='Métricas e Metas'?<>
    {metricsLoading&&<div className="metric-fetch-status" role="status"><Activity size={15}/> Atualizando indicadores para {period.label}…</div>}
    {notice&&<div className="notice"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="Fechar aviso"><X size={16}/></button></div>}
-      <div className="metrics-grid"><section className="card kpi kpi-total"><div className="kpi-top"><span className="muted">Faturamento total</span><Wallet size={22} className="purple"/></div><strong>{periodRevenue?formatMoney(periodRevenue.total):'—'}</strong><div className="kpi-total-breakdown">{periodRevenue?<><span>Setups ganhos: <b>{formatMoney(periodRevenue.setup)}</b></span><span>Mensalidades pagas: <b>{formatMoney(periodRevenue.paid)}</b></span></>:'Nenhum recebimento ou setup ganho neste período'}</div><div className="kpi-total-month">Período: {period.label}</div><div className="kpi-total-lifetime">Acumulado até aqui: <b>{cumulativeRevenue?formatMoney(cumulativeRevenue.total):'—'}</b></div></section><Kpi title="Contratos fechados" value={hasResult?String(result.contracts_count):'—'} sub={'No período selecionado'} Icon={FileText}/><Kpi title="Receita de implantação" value={hasResult?formatMoney(result.setup_revenue):'—'} sub="Valor contratado no período" Icon={Wallet}/><Kpi title="Novo MRR" value={hasResult?formatMoney(result.new_mrr):'—'} sub="Recorrência adicionada no período" Icon={TrendingUp}/><Kpi title="ARR equivalente do novo MRR" value={hasResult?formatMoney(result.new_mrr*12):'—'} sub="Anualização, não garantida" Icon={Activity}/></div>
+      <div className="metrics-grid"><section className="card kpi kpi-total"><div className="kpi-top"><span className="muted">Faturamento total</span><Wallet size={22} className="purple"/></div><strong>{periodRevenue?formatMoney(periodRevenue.total):'—'}</strong><div className="kpi-total-breakdown">{periodRevenue?<><span>Setups ganhos: <b>{formatMoney(periodRevenue.setup)}</b></span><span>Mensalidades pagas: <b>{formatMoney(periodRevenue.paid)}</b></span></>:'Nenhum recebimento ou setup ganho neste período'}</div><div className="kpi-total-month">Período: {period.label}</div></section><Kpi title="Contratos fechados" value={hasResult?String(result.contracts_count):'—'} sub={'No período selecionado'} Icon={FileText}/><Kpi title="Receita de implantação" value={hasResult?formatMoney(result.setup_revenue):'—'} sub="Valor contratado no período" Icon={Wallet}/><Kpi title="Novo MRR" value={hasResult?formatMoney(result.new_mrr):'—'} sub="Recorrência adicionada no período" Icon={TrendingUp}/><Kpi title="ARR equivalente do novo MRR" value={hasResult?formatMoney(result.new_mrr*12):'—'} sub="Anualização, não garantida" Icon={Activity}/></div>
    {periodUnit==='day'||periodUnit==='week'?<section className="card goals-card period-no-target"><div className="section-heading"><div className="heading-icon"><Target size={22}/></div><div><h2>Metas mensais</h2><p>As metas são configuradas por mês. Não dividimos uma meta mensal artificialmente por dias ou semanas.</p></div><button className="link-btn" onClick={()=>setPeriodUnit('month')}>Ver metas do mês <ArrowRight size={15}/></button></div></section>:
-   <section className="card goals-card"><div className="section-heading"><div className="heading-icon"><Target size={22}/></div><div><h2>{periodUnit==='year'?'Metas do ano':'Metas do mês'}</h2><p>{periodUnit==='year'?(configuredMonths===12?'Todos os 12 meses possuem metas configuradas.':configuredMonths+' de 12 meses com metas configuradas. O progresso considera somente esses meses.'):'Acompanhe seu progresso em direção aos objetivos.'}</p></div><button className="link-btn" onClick={()=>{setGoalDraft({...monthlyGoals.find(r=>r.month===month)||blankGoal});setResultDraft({...manualResult});setEditOpen(true)}}>{periodUnit==='year'?'Editar meta mensal':'Editar metas'} <ArrowRight size={15}/></button></div><div className="goals-inner"><div className="donut-section"><div className="donut" style={{background:goals.contracts_target>0?'conic-gradient(#9162ff 0% '+Math.min(100,pct)+'%,#29243f '+Math.min(100,pct)+'% 100%)':'#29243f'}}><div><strong>{goals.contracts_target>0?pct+'%':'—'}</strong><small>{goals.contracts_target>0?'da meta de contratos':'Meta não definida'}</small></div></div></div><div className="goal-items"><MiniProgress name="Contratos" value={result.contracts_count} target={goals.contracts_target}/><MiniProgress name="Faturamento de implantação" value={result.setup_revenue} target={goals.setup_revenue_target} unit="R$"/><MiniProgress name="Novo MRR" value={result.new_mrr} target={goals.new_mrr_target} unit="R$"/></div></div></section>}
-   <div className="charts-grid"><section className="card chart-card"><div className="chart-title"><div><h2>Receita de implantação</h2><p>{periodUnit==='day'?'Receita contratada por hora':periodUnit==='year'?'Receita contratada por mês':'Receita contratada por dia'}</p></div><div className="round-icon"><Wallet size={18}/></div></div><div className="chart-summary">{hasResult?formatMoney(result.setup_revenue):'—'}<span>no período</span></div><div className="chart-container"><ResponsiveContainer width="100%" height="100%"><BarChart data={chart} margin={{top:18,right:3,left:-24,bottom:0}}><CartesianGrid stroke="#25243b" vertical={false}/><XAxis dataKey="name" stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}}/><YAxis stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}} tickFormatter={v=>v>=1000?v/1000+'k':String(v)}/><Tooltip formatter={(v)=>formatMoney(Number(v))} contentStyle={{background:'#1c1b30',border:'1px solid #393450',borderRadius:10,color:'#fff'}}/><Bar dataKey="receita" radius={[6,6,0,0]} fill="#9162ff" maxBarSize={43}/></BarChart></ResponsiveContainer></div></section>
+   <section className="card goals-card"><div className="section-heading"><div className="heading-icon"><Target size={22}/></div><div><h2>{periodUnit==='all'?'Metas de todo o período':periodUnit==='year'?'Metas do ano':'Metas do mês'}</h2><p>{periodUnit==='all'?('Soma das metas de '+configuredMonths+' meses cadastrados.'):periodUnit==='year'?(configuredMonths===12?'Todos os 12 meses possuem metas configuradas.':configuredMonths+' de 12 meses com metas configuradas. O progresso considera somente esses meses.'):'Acompanhe seu progresso em direção aos objetivos.'}</p></div><button className="link-btn" onClick={()=>{setGoalDraft({...monthlyGoals.find(r=>r.month===month)||blankGoal});setResultDraft({...manualResult});setEditOpen(true)}}>{periodUnit==='year'||periodUnit==='all'?'Editar meta mensal':'Editar metas'} <ArrowRight size={15}/></button></div><div className="goals-inner"><div className="donut-section"><div className="donut" style={{background:goals.contracts_target>0?'conic-gradient(#9162ff 0% '+Math.min(100,pct)+'%,#29243f '+Math.min(100,pct)+'% 100%)':'#29243f'}}><div><strong>{goals.contracts_target>0?pct+'%':'—'}</strong><small>{goals.contracts_target>0?'da meta de contratos':'Meta não definida'}</small></div></div></div><div className="goal-items"><MiniProgress name="Contratos" value={result.contracts_count} target={goals.contracts_target}/><MiniProgress name="Faturamento de implantação" value={result.setup_revenue} target={goals.setup_revenue_target} unit="R$"/><MiniProgress name="Novo MRR" value={result.new_mrr} target={goals.new_mrr_target} unit="R$"/></div></div></section>}
+   <div className="charts-grid"><section className="card chart-card"><div className="chart-title"><div><h2>Receita de implantação</h2><p>{periodUnit==='day'?'Receita contratada por hora':periodUnit==='year'?'Receita contratada por mês':periodUnit==='all'?'Evolução ao longo de todo o histórico':'Receita contratada por dia'}</p></div><div className="round-icon"><Wallet size={18}/></div></div><div className="chart-summary">{hasResult?formatMoney(result.setup_revenue):'—'}<span>no período</span></div><div className="chart-container"><ResponsiveContainer width="100%" height="100%"><BarChart data={chart} margin={{top:18,right:3,left:-24,bottom:0}}><CartesianGrid stroke="#25243b" vertical={false}/><XAxis dataKey="name" stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}}/><YAxis stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}} tickFormatter={v=>v>=1000?v/1000+'k':String(v)}/><Tooltip formatter={(v)=>formatMoney(Number(v))} contentStyle={{background:'#1c1b30',border:'1px solid #393450',borderRadius:10,color:'#fff'}}/><Bar dataKey="receita" radius={[6,6,0,0]} fill="#9162ff" maxBarSize={43}/></BarChart></ResponsiveContainer></div></section>
    <section className="card chart-card"><div className="chart-title"><div><h2>Evolução do MRR</h2><p>Histórico de nova recorrência contratada, sem descontar cancelamentos</p></div><div className="round-icon"><TrendingUp size={18}/></div></div><div className="chart-summary">{history.length?formatMoney(displayedMRR):'—'}<span>Soma do MRR registrado no histórico</span></div><div className="chart-container"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart} margin={{top:18,right:3,left:-24,bottom:0}}><defs><linearGradient id="mrrFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#9061ff" stopOpacity={.36}/><stop offset="100%" stopColor="#9061ff" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#25243b" vertical={false}/><XAxis dataKey="name" stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}}/><YAxis stroke="#777b91" tickLine={false} axisLine={false} tick={{fontSize:13}} tickFormatter={v=>v>=1000?v/1000+'k':String(v)}/><Tooltip formatter={v=>formatMoney(Number(v))} contentStyle={{background:'#1c1b30',border:'1px solid #393450',borderRadius:10,color:'#fff'}}/><Area type="monotone" dataKey="mrr" stroke="#9162ff" strokeWidth={3} fill="url(#mrrFill)" dot={{fill:'#9162ff',strokeWidth:2,r:3}}/></AreaChart></ResponsiveContainer></div></section>
    <section className="card funnel-card"><div className="chart-title"><div><h2>Funil comercial</h2><p>{periodUnit==='day'||periodUnit==='week'?'O funil é preenchido mensalmente':'Conversão entre as etapas do período'}</p></div><div className="round-icon"><Target size={18}/></div></div>{hasFunnel?<><div className="funnel"><div className="funnel-row"><div style={{width:'100%'}}>Leads <b>{result.leads_count}</b></div></div><div className="funnel-row"><div style={{width:'82%'}}>Reuniões <b>{result.meetings_count}</b></div></div><div className="funnel-row"><div style={{width:'67%'}}>Propostas <b>{result.proposals_count}</b></div></div><div className="funnel-row"><div style={{width:'53%'}}>Contratos <b>{result.contracts_count}</b></div></div></div><div className="funnel-total"><TrendingUp size={16}/> Conversão geral: <b>{percent(result.contracts_count,result.leads_count||0)}%</b></div></>:<div className="funnel-empty"><Target size={34}/><b>Seu funil começa aqui</b><p>{periodUnit==='day'||periodUnit==='week'?'Os indicadores de leads, reuniões e propostas são registrados por mês. Selecione Mês ou Ano para consultá-los.':'Cadastre leads, reuniões e propostas mensais para acompanhar sua conversão real.'}</p><button onClick={()=>{if(periodUnit==='day'||periodUnit==='week'){setPeriodUnit('month');return}setGoalDraft({...monthlyGoals.find(r=>r.month===month)||blankGoal});setResultDraft({...manualResult});setEditOpen(true)}}>{periodUnit==='day'||periodUnit==='week'?'Ver funil mensal':'Preencher indicadores'} <ArrowRight size={15}/></button></div>}</section></div>
    <div className="bottom-grid"><section className="card bottom-card"><div className="small-heading"><Zap size={20}/><h2>Principais insights</h2></div>{hasResult?<><div className="insight-row"><CircleCheck size={17}/><span>{result.contracts_count} contratos cadastrados no período.</span></div><div className="insight-row"><CircleCheck size={17}/><span>{formatMoney(result.setup_revenue)} de receita de implantação registrada.</span></div><div className="insight-row"><CircleCheck size={17}/><span>{periodUnit==='day'||periodUnit==='week'?'Metas comparativas disponíveis nas visões mensais ou anuais.':goals.contracts_target>0?'Meta de contratos atingida em '+pct+'%.':'Meta de contratos ainda não definida.'}</span></div></>:<p className="empty-task">Cadastre resultados do mês para visualizar insights reais.</p>}</section>

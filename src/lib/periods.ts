@@ -23,7 +23,7 @@ export function getPeriod(unit:PeriodUnit,anchor:string):PeriodWindow{
  }
  if(unit==='month'){
   const month=monthOf(anchor),y=Number(month.slice(0,4)),m=Number(month.slice(5,7));
-  return{start:month,end:y+'-'+pad(m===12?1:m+1)+'-01',label:title(month,{month:'long',year:'numeric'}),...m===12?{end:(y+1)+'-01-01'}:{}};
+  return{start:month,end:m===12?(y+1)+'-01-01':y+'-'+pad(m+1)+'-01',label:title(month,{month:'long',year:'numeric'})};
  }
  const year=Number(anchor.slice(0,4));
  return{start:year+'-01-01',end:(year+1)+'-01-01',label:String(year)};

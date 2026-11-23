@@ -1,9 +1,10 @@
 'use client';
 import {useCallback,useEffect,useMemo,useState} from 'react';
-import {Activity,ArrowRight,Bell,BriefcaseBusiness,CalendarDays,Check,CheckCheck,ChevronDown,CircleCheck,ClipboardCheck,FileText,Goal,LayoutDashboard,LockKeyhole,LogOut,Menu,Plus,Settings2,Target,TrendingUp,Users,Wallet, X, Zap} from 'lucide-react';
+import {Activity,ArrowRight,Bell,BriefcaseBusiness,CalendarDays,Check,CheckCheck,ChevronDown,ChevronLeft,ChevronRight,CircleCheck,ClipboardCheck,FileText,Goal,LayoutDashboard,LockKeyhole,LogOut,Menu,Plus,Settings2,Target,TrendingUp,Users,Wallet, X, Zap} from 'lucide-react';
 import {ResponsiveContainer,AreaChart,Area,CartesianGrid,XAxis,YAxis,Tooltip,BarChart,Bar} from 'recharts';
 import {supabase} from '@/lib/supabase';
 import CRMWorkspace from '@/components/crm/CRMWorkspace';
+import {type PeriodUnit,type DealMetric,type PaidMetric,type ManualMetric,getPeriod,stepPeriod,saoPauloDate,monthOf,startTimestamp,localDay,inWindow,groupTimeline,num} from '@/lib/periods';
 import type {User} from '@supabase/supabase-js';
 type GoalRow={contracts_target:number;setup_revenue_target:number;new_mrr_target:number};
 type ResultRow={month:string;contracts_count:number;setup_revenue:number;new_mrr:number;leads_count:number|null;meetings_count:number|null;proposals_count:number|null;notes?:string|null};
@@ -26,56 +27,115 @@ function MiniProgress({name,value,target,unit=''}:{name:string;value:number;targ
 }
 export default function Home(){
  const [user,setUser]=useState<User|null>(null),[authChecking,setAuthChecking]=useState(true),[authOpen,setAuthOpen]=useState(false),[authMode,setAuthMode]=useState<'login'|'signup'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
- const [month,setMonth]=useState(getMonth()),[goals,setGoals]=useState<GoalRow>(blankGoal),[result,setResult]=useState<ResultRow>(blankResult(getMonth())),[manualResult,setManualResult]=useState<ResultRow>(blankResult(getMonth())),[history,setHistory]=useState<ResultRow[]>([]),[actions,setActions]=useState<ActionRow[]>([]);
+ const [periodUnit,setPeriodUnit]=useState<PeriodUnit>('month'),[anchorDay,setAnchorDay]=useState(saoPauloDate());
+ const month=monthOf(anchorDay);
+ const period=useMemo(()=>getPeriod(periodUnit,anchorDay),[periodUnit,anchorDay]);
+ const [goals,setGoals]=useState<GoalRow>(blankGoal),[result,setResult]=useState<ResultRow>(blankResult(getMonth())),[manualResult,setManualResult]=useState<ResultRow>(blankResult(getMonth())),[history,setHistory]=useState<ResultRow[]>([]),[actions,setActions]=useState<ActionRow[]>([]);
+ const [monthlyGoals,setMonthlyGoals]=useState<(GoalRow&{month:string})[]>([]);
+ const [monthlyManual,setMonthlyManual]=useState<ResultRow[]>([]);
+ const [rawWins,setRawWins]=useState<DealMetric[]>([]);
+ const [rawPayments,setRawPayments]=useState<PaidMetric[]>([]);
+ const [hasPeriodData,setHasPeriodData]=useState(false);
+ const [configuredMonths,setConfiguredMonths]=useState(0);
  const [cumulativeRevenue,setCumulativeRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
+ const [periodRevenue,setPeriodRevenue]=useState<{setup:number;paid:number;total:number}|null>(null);
  const [editOpen,setEditOpen]=useState(false),[goalDraft,setGoalDraft]=useState<GoalRow>(blankGoal),[resultDraft,setResultDraft]=useState<ResultRow>(blankResult(getMonth())),[actionText,setActionText]=useState('');
  const [activeTab,setActiveTab]=useState<Tab>('Métricas e Metas'),[sidebarOpen,setSidebarOpen]=useState(false),[sidebarHidden,setSidebarHidden]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const alert=(message:string)=>setNotice(message);
  useEffect(()=>{try{setSidebarHidden(window.localStorage.getItem('liderapp-sidebar-hidden')==='true')}catch{}},[]);
  const toggleSidebar=()=>{const next=!sidebarHidden;setSidebarHidden(next);try{window.localStorage.setItem('liderapp-sidebar-hidden',String(next))}catch{}};
+
  const load=useCallback(async(u:User|null,m:string)=>{
-  if(!supabase||!u){setGoals(blankGoal);setHistory([]);setActions([]);setManualResult(blankResult(m));setResult(blankResult(m));setCumulativeRevenue(null);return}
-  const [goalResponse,resultResponse,actionResponse,winsResponse,revenueResponse]=await Promise.all([
-   supabase.from('monthly_goals').select('contracts_target,setup_revenue_target,new_mrr_target').eq('user_id',u.id).eq('month',m).maybeSingle(),
-   supabase.from('monthly_results').select('month,contracts_count,setup_revenue,new_mrr,leads_count,meetings_count,proposals_count,notes').eq('user_id',u.id).lte('month',m).gte('month',previous(m,11)).order('month',{ascending:true}),
-   supabase.from('action_items').select('id,title,completed').eq('user_id',u.id).eq('month',m).order('created_at',{ascending:true}),
-   supabase.from('crm_monthly_wins').select('month,contracts_count,setup_revenue,new_mrr').eq('user_id',u.id).lte('month',m).gte('month',previous(m,11)),
-   supabase.from('crm_monthly_revenue').select('month,setups_won,recurring_paid,revenue_total').eq('user_id',u.id).lte('month',m)
-  ]);
-  if(goalResponse.error||resultResponse.error||actionResponse.error||winsResponse.error||revenueResponse.error){alert('Não foi possível atualizar as métricas: '+(goalResponse.error||resultResponse.error||actionResponse.error||winsResponse.error||revenueResponse.error)?.message);return}
-  const revenueRows=(revenueResponse.data||[]) as {month:string;setups_won:number;recurring_paid:number;revenue_total:number}[];
-  setCumulativeRevenue(revenueRows.length?{
-   setup:revenueRows.reduce((n,r)=>n+Number(r.setups_won),0),
-   paid:revenueRows.reduce((n,r)=>n+Number(r.recurring_paid),0),
-   total:revenueRows.reduce((n,r)=>n+Number(r.revenue_total),0)
-  }:null);
-  const manualRows=(resultResponse.data||[]) as ResultRow[];
-  const wins=(winsResponse.data||[]) as {month:string;contracts_count:number;setup_revenue:number;new_mrr:number}[];
-  const rowMap=new Map<string,ResultRow>(manualRows.map(r=>[r.month,{...r,contracts_count:Number(r.contracts_count),setup_revenue:Number(r.setup_revenue),new_mrr:Number(r.new_mrr)}]));
-  for(const w of wins){
-   const old=rowMap.get(w.month)||blankResult(w.month);
-   rowMap.set(w.month,{...old,contracts_count:Number(old.contracts_count)+Number(w.contracts_count),setup_revenue:Number(old.setup_revenue)+Number(w.setup_revenue),new_mrr:Number(old.new_mrr)+Number(w.new_mrr)});
+  if(!supabase||!u){
+   setGoals(blankGoal);setHistory([]);setActions([]);setManualResult(blankResult(m));setResult(blankResult(m));
+   setMonthlyGoals([]);setMonthlyManual([]);setRawWins([]);setRawPayments([]);setHasPeriodData(false);
+   setCumulativeRevenue(null);setPeriodRevenue(null);setConfiguredMonths(0);return;
   }
-  const rows=Array.from(rowMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
-  setGoals(goalResponse.data?{contracts_target:goalResponse.data.contracts_target,setup_revenue_target:Number(goalResponse.data.setup_revenue_target),new_mrr_target:Number(goalResponse.data.new_mrr_target)}:blankGoal);
-  setHistory(rows);
-  setActions((actionResponse.data||[]) as ActionRow[]);
-  setManualResult(manualRows.find(r=>r.month===m)||blankResult(m));
-  setResult(rows.find(r=>r.month===m)||blankResult(m));
- },[]);
+  const beforeEnd=startTimestamp(period.end);
+  const [goalsResponse,resultsResponse,actionsResponse]=await Promise.all([
+   supabase.from('monthly_goals').select('month,contracts_target,setup_revenue_target,new_mrr_target').eq('user_id',u.id).gte('month',period.start.slice(0,4)+'-01-01').lt('month',period.end).order('month'),
+   supabase.from('monthly_results').select('month,contracts_count,setup_revenue,new_mrr,leads_count,meetings_count,proposals_count,notes').eq('user_id',u.id).lt('month',period.end).order('month'),
+   supabase.from('action_items').select('id,title,completed').eq('user_id',u.id).eq('month',m).order('created_at',{ascending:true})
+  ]);
+  const firstError=goalsResponse.error||resultsResponse.error||actionsResponse.error;
+  if(firstError){alert('Não foi possível consultar as métricas: '+firstError.message);return}
+  // Fetch the complete historical ledger (Supabase's Data API may cap each page at 1000 rows).
+  const wins:DealMetric[]=[];
+  const payments:PaidMetric[]=[];
+  for(let offset=0;offset<1000000;offset+=1000){
+   const r=await supabase.from('crm_deals').select('won_at,setup_value,monthly_value').eq('user_id',u.id).eq('status','won').not('won_at','is',null).lt('won_at',beforeEnd).order('won_at').range(offset,offset+999);
+   if(r.error){alert('Não foi possível consultar os negócios ganhos: '+r.error.message);return}
+   wins.push(...((r.data||[]) as DealMetric[]));
+   if(!r.data||r.data.length<1000)break;
+  }
+  for(let offset=0;offset<1000000;offset+=1000){
+   const r=await supabase.from('crm_recurring_payments').select('paid_at,amount').eq('user_id',u.id).lt('paid_at',period.end).order('paid_at').range(offset,offset+999);
+   if(r.error){alert('Não foi possível consultar as mensalidades pagas: '+r.error.message);return}
+   payments.push(...((r.data||[]) as PaidMetric[]));
+   if(!r.data||r.data.length<1000)break;
+  }
+  const allManual=((resultsResponse.data||[]) as ResultRow[]).map(r=>({
+   ...r,contracts_count:num(r.contracts_count),setup_revenue:num(r.setup_revenue),new_mrr:num(r.new_mrr)
+  }));
+  const allGoals=(goalsResponse.data||[]).map(r=>({month:r.month,contracts_target:num(r.contracts_target),setup_revenue_target:num(r.setup_revenue_target),new_mrr_target:num(r.new_mrr_target)}));
+  setMonthlyGoals(allGoals);setMonthlyManual(allManual);setRawWins(wins);setRawPayments(payments);
+  const selectedManual=periodUnit==='month'?allManual.filter(r=>r.month===period.start):periodUnit==='year'?allManual.filter(r=>r.month>=period.start&&r.month<period.end):[];
+  const selectedWins=wins.filter(d=>inWindow(localDay(d.won_at),period));
+  const selectedPayments=payments.filter(p=>inWindow(p.paid_at,period));
+  const manualTotal=(field:keyof ResultRow)=>selectedManual.reduce((sum,r)=>sum+num(r[field]),0);
+  const selectedResult:ResultRow={
+   month:m,
+   contracts_count:selectedWins.length+manualTotal('contracts_count'),
+   setup_revenue:selectedWins.reduce((sum,d)=>sum+num(d.setup_value),0)+manualTotal('setup_revenue'),
+   new_mrr:selectedWins.reduce((sum,d)=>sum+num(d.monthly_value),0)+manualTotal('new_mrr'),
+   leads_count:periodUnit==='month'&&selectedManual.length&&selectedManual[0].leads_count!==null?selectedManual[0].leads_count:null,
+   meetings_count:periodUnit==='month'&&selectedManual.length&&selectedManual[0].meetings_count!==null?selectedManual[0].meetings_count:null,
+   proposals_count:periodUnit==='month'&&selectedManual.length&&selectedManual[0].proposals_count!==null?selectedManual[0].proposals_count:null
+  };
+  if(periodUnit==='year'&&selectedManual.length===12&&selectedManual.every(r=>r.leads_count!==null&&r.meetings_count!==null&&r.proposals_count!==null)){
+   selectedResult.leads_count=manualTotal('leads_count');selectedResult.meetings_count=manualTotal('meetings_count');selectedResult.proposals_count=manualTotal('proposals_count');
+  }
+  const selectedGoalRows=periodUnit==='year'?allGoals.filter(r=>r.month>=period.start&&r.month<period.end):
+   periodUnit==='month'?allGoals.filter(r=>r.month===period.start):[];
+  const currentGoals:GoalRow=selectedGoalRows.reduce((sum,r)=>({
+   contracts_target:sum.contracts_target+r.contracts_target,
+   setup_revenue_target:sum.setup_revenue_target+r.setup_revenue_target,
+   new_mrr_target:sum.new_mrr_target+r.new_mrr_target
+  }),{...blankGoal});
+  const inSetup=selectedWins.reduce((sum,d)=>sum+num(d.setup_value),0);
+  const inPaid=selectedPayments.reduce((sum,p)=>sum+num(p.amount),0);
+  const totalSetup=wins.reduce((sum,d)=>sum+num(d.setup_value),0);
+  const totalPaid=payments.reduce((sum,p)=>sum+num(p.amount),0);
+  setPeriodRevenue(selectedWins.length||selectedPayments.length?{setup:inSetup,paid:inPaid,total:inSetup+inPaid}:null);
+  setCumulativeRevenue(wins.length||payments.length?{setup:totalSetup,paid:totalPaid,total:totalSetup+totalPaid}:null);
+  setGoals(currentGoals);setConfiguredMonths(selectedGoalRows.length);
+  setHasPeriodData(selectedWins.length>0||selectedPayments.length>0||selectedManual.length>0);
+  setManualResult(allManual.find(r=>r.month===m)||blankResult(m));
+  setResult(selectedResult);setActions((actionsResponse.data||[]) as ActionRow[]);
+  const monthlyMap=new Map<string,ResultRow>(allManual.map(r=>[r.month,{...r}]));
+  for(const d of wins){
+   const target=monthOf(localDay(d.won_at)),r=monthlyMap.get(target)||blankResult(target);
+   monthlyMap.set(target,{...r,contracts_count:r.contracts_count+1,setup_revenue:r.setup_revenue+num(d.setup_value),new_mrr:r.new_mrr+num(d.monthly_value)});
+  }
+  setHistory(Array.from(monthlyMap.values()).sort((a,b)=>a.month.localeCompare(b.month)));
+ },[period,periodUnit]);
  useEffect(()=>{if(!supabase){setAuthChecking(false);return}supabase.auth.getUser().then(({data})=>{setUser(data.user);setAuthChecking(false)});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null));return()=>subscription.unsubscribe()},[]);
  useEffect(()=>{if(!authChecking&&activeTab==='Métricas e Metas')void load(user,month)},[user,month,authChecking,load,activeTab]);
- const isLogged=!!user;const periodOptions=Array.from({length:15},(_,i)=>previous(getMonth(),i));
+ const isLogged=!!user;
+ const choosePeriod=(unit:PeriodUnit)=>{setPeriodUnit(unit)};
+ const movePeriod=(direction:number)=>setAnchorDay(day=>stepPeriod(periodUnit,day,direction));
+ const jumpToday=()=>setAnchorDay(saoPauloDate());
  const saveGoal=async()=>{if(!user||!supabase){alert('Entre para salvar suas metas.');return}if(!Number.isFinite(goalDraft.contracts_target)||goalDraft.contracts_target<=0||!Number.isFinite(goalDraft.setup_revenue_target)||goalDraft.setup_revenue_target<0||!Number.isFinite(goalDraft.new_mrr_target)||goalDraft.new_mrr_target<0){alert('Informe uma meta de contratos maior que zero. Metas financeiras não podem ser negativas.');return}setBusy(true);const {error}=await supabase.from('monthly_goals').upsert({...goalDraft,user_id:user.id,month,updated_at:new Date().toISOString()},{onConflict:'user_id,month'});setBusy(false);if(error){alert(error.message);return}setEditOpen(false);alert('Metas salvas com sucesso.');await load(user,month)};
  const saveResult=async(payload=resultDraft)=>{if(!user||!supabase){alert('Entre na sua conta para salvar resultados.');setAuthOpen(true);return}setBusy(true);const{error}=await supabase.from('monthly_results').upsert({...payload,user_id:user.id,month,updated_at:new Date().toISOString()},{onConflict:'user_id,month'});setBusy(false);if(error){alert(error.message);return}setEditOpen(false);alert('Resultados gravados com sucesso.');await load(user,month)};
  const authenticate=async(e:React.FormEvent)=>{e.preventDefault();if(!supabase){alert('Supabase não está configurado.');return}setBusy(true);const{error,data}=authMode==='signup'?await supabase.auth.signUp({email,password}):await supabase.auth.signInWithPassword({email,password});setBusy(false);if(error){alert(error.message);return}if(authMode==='signup'&&!data.session){alert('Conta criada. Verifique o e-mail para confirmar o cadastro antes de entrar.');return}setAuthOpen(false);setPassword('');alert('Acesso autorizado.')};
  const addAction=async()=>{if(!user||!supabase){setAuthOpen(true);return}if(!actionText.trim())return;const{error}=await supabase.from('action_items').insert({user_id:user.id,month,title:actionText.trim()});if(error){alert(error.message);return}setActionText('');await load(user,month)};
  const toggleAction=async(a:ActionRow)=>{if(!user||!supabase)return;const{error}=await supabase.from('action_items').update({completed:!a.completed}).eq('id',a.id).eq('user_id',user.id);if(error){alert(error.message);return}await load(user,month)};
- const chart=useMemo(()=>Array.from({length:6},(_,i)=>previous(month,5-i)).map(key=>{const current=history.find(r=>r.month===key);const older=history.filter(r=>r.month<=key);return {name:monthLabel(key).split(' ')[0],full:monthLabel(key),receita:current?Number(current.setup_revenue):null,mrr:older.length?older.reduce((sum,r)=>sum+Number(r.new_mrr),0):null,hasData:!!current}}),[month,history]);
+ const chart=useMemo(()=>groupTimeline(periodUnit,period,rawWins,monthlyManual),[periodUnit,period,rawWins,monthlyManual]);
  const hasFunnel=result.leads_count!==null&&result.meetings_count!==null&&result.proposals_count!==null;
- const existingRevenue=history.reduce((sum,r)=>sum+Number(r.new_mrr),0);
+ const existingRevenue=rawWins.reduce((sum,r)=>sum+num(r.monthly_value),0)
+  +monthlyManual.filter(r=>r.month<monthOf(period.end)).reduce((sum,r)=>sum+num(r.new_mrr),0);
  const displayedMRR=existingRevenue;
- const hasResult=history.some(r=>r.month===month);
+ const hasResult=hasPeriodData;
  const pct=percent(result.contracts_count,goals.contracts_target);
  const noData=!hasResult;
  if(authChecking)return <main className="auth-screen"><div className="auth-loading"><div className="brand-mark">Λ</div><p>Verificando sua sessão...</p></div></main>;
@@ -118,9 +178,26 @@ export default function Home(){
      <div className="breadcrumb">Visão geral <span>/</span> <b>{activeTab}</b></div>
     </div>
     <div className="topbar-right">
-     {activeTab==='Métricas e Metas'&&<div className="topbar-controls">
-      <label className="period"><CalendarDays size={18}/><select aria-label="Selecionar mês" value={month} onChange={e=>setMonth(e.target.value)}>{periodOptions.map(m=><option key={m} value={m}>{new Date(m+'T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>)}</select><ChevronDown size={14}/></label>
-      <button className="btn purple-btn" onClick={()=>{setGoalDraft({...goals});setResultDraft({...manualResult});setEditOpen(true)}}><Settings2 size={17}/> Gerenciar metas</button>
+          {activeTab==='Métricas e Metas'&&<div className="topbar-controls">
+      <div className="period-filter" aria-label="Filtro de período">
+       <label className="period-granularity" title="Agrupamento das métricas">
+        <select aria-label="Tipo de período" value={periodUnit} onChange={e=>choosePeriod(e.target.value as PeriodUnit)}>
+         <option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option><option value="year">Ano</option>
+        </select><ChevronDown size={14}/>
+       </label>
+       <button className="period-arrow" onClick={()=>movePeriod(-1)} aria-label="Período anterior" title="Período anterior"><ChevronLeft size={19}/></button>
+       <label className="period-date-entry" title={period.label}>
+        <CalendarDays size={17}/>
+        {periodUnit==='year'?
+          <input type="number" min={1} max={9998} aria-label="Selecionar ano" value={Number(anchorDay.slice(0,4))} onChange={e=>{const year=Number(e.target.value);if(year>=1&&year<=9998)setAnchorDay(String(year).padStart(4,'0')+anchorDay.slice(4))}}/>:
+         <input type={periodUnit==='month'?'month':'date'} aria-label={periodUnit==='month'?'Selecionar mês':'Selecionar data'} value={periodUnit==='month'?month.slice(0,7):anchorDay} onChange={e=>{const next=e.target.value;if(next)setAnchorDay(periodUnit==='month'?next+'-01':next)}}/>
+        }
+       </label>
+       <button className="period-arrow" onClick={()=>movePeriod(1)} aria-label="Próximo período" title="Próximo período"><ChevronRight size={19}/></button>
+       <button className="period-today" onClick={jumpToday}>Hoje</button>
+       <span className="period-readable" title={period.label}>{period.label}</span>
+      </div>
+      <button className="btn purple-btn" onClick={()=>{setGoalDraft(monthlyGoals.find(r=>r.month===month)||{...blankGoal});setResultDraft({...manualResult});setEditOpen(true)}}><Settings2 size={17}/> Gerenciar metas</button>
      </div>}
      <span className="live-indicator"><i/> Banco conectado</span>
      <button className="icon-btn" onClick={()=>alert('Suas notificações aparecerão aqui.')} aria-label="Notificações"><Bell size={19}/></button>

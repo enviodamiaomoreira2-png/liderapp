@@ -152,7 +152,7 @@ export default function Home(){
   :periodUnit==='year'&&yearlyGoals.length===12&&yearlyGoals.every(g=>g.contracts_target>0);
  const noData=!hasResult;
  // Monthly recurring estimate based on currently won deals, not cash received or an ARR conversion.
- const forecastCutoff=periodUnit==='all'?saoPauloDate():period.end;
+ const forecastCutoff=periodUnit==='all'?getPeriod('day',saoPauloDate()).end:period.end;
  const recurringDeals=rawWins.filter(d=>localDay(d.won_at)<forecastCutoff&&num(d.monthly_value)>0);
  const monthlyForecast=recurringDeals.reduce((sum,d)=>sum+num(d.monthly_value),0);
  const forecastSubtitle=periodUnit==='all'?'Base mensal dos contratos ganhos'

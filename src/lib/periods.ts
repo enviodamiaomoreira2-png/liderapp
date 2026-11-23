@@ -1,5 +1,5 @@
 /** Períodos do painel. Datas civis do Brasil; intervalos [início, fim). */
-export type PeriodUnit='day'|'week'|'month'|'year';
+export type PeriodUnit='day'|'week'|'month'|'year'|'all';
 export type PeriodWindow={start:string;end:string;label:string};
 const zone='America/Sao_Paulo';
 const pad=(n:number)=>String(n).padStart(2,'0');
@@ -14,6 +14,7 @@ export const saoPauloDate=(iso=new Date().toISOString())=>{
 export const monthOf=(day:string)=>day.slice(0,7)+'-01';
 const title=(day:string,options:Intl.DateTimeFormatOptions)=>new Intl.DateTimeFormat('pt-BR',{...options,timeZone:'UTC'}).format(new Date(day+'T12:00:00Z'));
 export function getPeriod(unit:PeriodUnit,anchor:string):PeriodWindow{
+ if(unit==='all')return {start:'0001-01-01',end:'9999-12-31',label:'Todo o período'};
  const dt=dateAt(anchor);
  if(unit==='day')return{start:anchor,end:offsetDay(anchor,1),label:title(anchor,{day:'2-digit',month:'long',year:'numeric'})};
  if(unit==='week'){
@@ -29,6 +30,7 @@ export function getPeriod(unit:PeriodUnit,anchor:string):PeriodWindow{
  return{start:year+'-01-01',end:(year+1)+'-01-01',label:String(year)};
 }
 export function stepPeriod(unit:PeriodUnit,anchor:string,delta:number){
+ if(unit==='all')return anchor;
  if(unit==='day')return offsetDay(anchor,delta);
  if(unit==='week')return offsetDay(anchor,delta*7);
  const d=dateAt(anchor);
@@ -52,6 +54,34 @@ export function groupTimeline(unit:PeriodUnit,period:PeriodWindow,wins:DealMetri
  const baseline=wins.filter(x=>localDay(x.won_at)<period.start).reduce((sum,d)=>sum+num(d.monthly_value),0)
   +manual.filter(x=>x.month<monthOf(period.start)).reduce((sum,d)=>sum+num(d.new_mrr),0);
  let cumulative=baseline;
+ if(unit==='all'){
+  // Aggregate all registered months; use years only when the history spans more than 24 months.
+  const months=Array.from(new Set([
+   ...wins.map(d=>monthOf(localDay(d.won_at)).slice(0,7)),
+   ...manual.map(x=>x.month.slice(0,7))
+  ])).sort();
+  if(months.length===0)return slots;
+  const first=months[0],last=months[months.length-1];
+  const span=(Number(last.slice(0,4))-Number(first.slice(0,4)))*12+Number(last.slice(5,7))-Number(first.slice(5,7))+1;
+  const byYear=span>24;
+  const buckets:string[]=[];
+  if(byYear){
+   for(let y=Number(first.slice(0,4));y<=Number(last.slice(0,4));y++)buckets.push(String(y));
+  }else{
+   for(let y=Number(first.slice(0,4)),m=Number(first.slice(5,7));y<Number(last.slice(0,4))||(y===Number(last.slice(0,4))&&m<=Number(last.slice(5,7)));){
+    buckets.push(String(y)+'-'+pad(m));
+    if(++m===13){m=1;y++}
+   }
+  }
+  for(const key of buckets){
+   const entries=wins.filter(x=>byYear?localDay(x.won_at).startsWith(key):monthOf(localDay(x.won_at)).startsWith(key));
+   const extra=manual.filter(x=>x.month.startsWith(key));
+   const sumSetup=entries.reduce((v,x)=>v+num(x.setup_value),0)+extra.reduce((v,x)=>v+num(x.setup_revenue),0);
+   cumulative+=entries.reduce((v,x)=>v+num(x.monthly_value),0)+extra.reduce((v,x)=>v+num(x.new_mrr),0);
+   slots.push({key,name:byYear?key:title(key+'-01',{month:'short',year:'2-digit'}),receita:entries.length||extra.length?sumSetup:null,mrr:cumulative,hasData:entries.length+extra.length>0});
+  }
+  return slots;
+ }
  if(unit==='day'){
   for(let h=0;h<24;h++){
    const hour=pad(h);const entries=wins.filter(x=>localDay(x.won_at)===period.start&&localHour(x.won_at)===hour);

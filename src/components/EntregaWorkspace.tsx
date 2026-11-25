@@ -25,7 +25,6 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  const [selectedOrg,setSelectedOrg]=useState('');
  const [activeSite,setActiveSite]=useState<SiteRecord|null>(null);
  const [device,setDevice]=useState<'desktop'|'mobile'>('desktop');
- const [previewFull,setPreviewFull]=useState(false);
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false);
  const [notice,setNotice]=useState(''),[query,setQuery]=useState('');
  const [integrations,setIntegrations]=useState<Integrations|null>(null);
@@ -136,6 +135,8 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  };
  const publish=async()=>{
   if(!clean(brief.clientName)||(!clean(brief.segment)&&!clean(brief.services))){setNotice('Informe a empresa e pelo menos o segmento ou os serviços. O título principal pode ser gerado automaticamente.');return}
+  if(!brief.imageUrls?.length&&!brief.videoUrl?.trim()){setNotice('Para entregar um site profissional, envie pelo menos uma foto real ou um vídeo da empresa antes de publicar.');return}
+  if(!brief.whatsapp?.trim()&&!brief.phone?.trim()&&!brief.email?.trim()){setNotice('Informe ao menos um contato real (WhatsApp, telefone ou e-mail) para o site receber oportunidades.');return}
   setBusy(true);
   try{
    const saved=await saveDraft();
@@ -324,7 +325,13 @@ export default function EntregaWorkspace({userId}:{userId:string}){
    <aside className="delivery-preview-column">
     <section className="delivery-panel delivery-preview-panel"><div className="delivery-preview-bar"><div><span className="delivery-tag">PRÉ-VISUALIZAÇÃO</span><h2>Veja antes de publicar.</h2></div><div className="delivery-device"><button className={device==='desktop'?'active':''} title="Computador" onClick={()=>setDevice('desktop')}><Monitor size={18}/></button><button className={device==='mobile'?'active':''} title="Celular" onClick={()=>setDevice('mobile')}><Smartphone size={18}/></button></div></div>
      <div className={'delivery-preview-frame '+device}><div className="delivery-browser"><span/><span/><span/><div>{'Prévia local · site do cliente'}</div></div><iframe title="Prévia do site em construção" srcDoc={preview} sandbox="" loading="lazy"/></div>
-     <div className="delivery-preview-full"><button className="delivery-inline-button" onClick={openFullPreview}><ExternalLink size={16}/> Abrir prévia em tela cheia</button><span>Prévia atualizada em tempo real</span></div><div className="delivery-preview-actions"><button className="delivery-outline" disabled={busy||uploading} onClick={()=>void handleSave()}><Save size={17}/> {busy?'Salvando...':'Salvar rascunho'}</button><button className="delivery-primary" disabled={busy||uploading} onClick={()=>void publish()}><Rocket size={17}/> {busy?'Processando...':activeSite?.github_repo?'Atualizar publicação':'Criar site e publicar'}</button></div>
+     <div className="delivery-readiness"><div className="delivery-tag">CHECKLIST DE PUBLICAÇÃO</div><div className="delivery-readiness-grid">
+      <span className={brief.clientName.trim()?'ready':'missing'}>{brief.clientName.trim()?'✓':'○'} Empresa identificada</span>
+      <span className={brief.services.trim()||brief.segment.trim()?'ready':'missing'}>{brief.services.trim()||brief.segment.trim()?'✓':'○'} Segmento ou serviços</span>
+      <span className={brief.imageUrls?.length||brief.videoUrl?.trim()?'ready':'missing'}>{brief.imageUrls?.length||brief.videoUrl?.trim()?'✓':'○'} Foto ou vídeo real</span>
+      <span className={brief.whatsapp?.trim()||brief.phone?.trim()||brief.email?.trim()?'ready':'missing'}>{brief.whatsapp?.trim()||brief.phone?.trim()||brief.email?.trim()?'✓':'○'} Canal de contato</span>
+      </div></div>
+      <div className="delivery-preview-full"><button className="delivery-inline-button" onClick={openFullPreview}><ExternalLink size={16}/> Abrir prévia em tela cheia</button><span>Prévia atualizada em tempo real</span></div><div className="delivery-preview-actions"><button className="delivery-outline" disabled={busy||uploading} onClick={()=>void handleSave()}><Save size={17}/> {busy?'Salvando...':'Salvar rascunho'}</button><button className="delivery-primary" disabled={busy||uploading} onClick={()=>void publish()}><Rocket size={17}/> {busy?'Processando...':activeSite?.github_repo?'Atualizar publicação':'Criar site e publicar'}</button></div>
      {activeSite&&<div className="delivery-publish-summary"><span className={'delivery-status '+siteStatus(activeSite)}>{stateText[activeSite.status]}</span><strong>{activeSite.client_name}</strong>
        {activeSite.github_url&&<a href={activeSite.github_url} target="_blank" rel="noopener noreferrer"><Code2 size={15}/> Abrir repositório GitHub <ExternalLink size={14}/></a>}
        {activeSite.vercel_url&&<a href={activeSite.vercel_url} target="_blank" rel="noopener noreferrer"><Globe2 size={15}/> Abrir site publicado <ExternalLink size={14}/></a>}

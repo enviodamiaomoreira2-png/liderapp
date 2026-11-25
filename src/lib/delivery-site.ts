@@ -180,6 +180,7 @@ export function renderClientSite(input:SiteBrief){
  const navBottom='<a href="#inicio">Início</a>'+nav;
  const htmlDoc=[
  '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+ '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">',
  '<title>'+title+(b.segment?' | '+html(b.segment):'')+'</title><meta name="description" content="'+html(b.subheadline||b.description||b.segment).slice(0,160)+'">',
  '<meta name="theme-color" content="'+accent+'"><meta property="og:type" content="website"><meta property="og:title" content="'+title+'"><meta property="og:description" content="'+subheadline+'">',
  (cover?'<meta property="og:image" content="'+html(cover)+'">':''),

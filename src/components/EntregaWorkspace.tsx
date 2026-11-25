@@ -112,7 +112,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
    }).eq('id',saved.id).eq('user_id',userId).select('*').single();
    if(error)throw new Error(error.message);
    setActiveSite(data as SiteRecord);await refresh();
-   setNotice(uploads.length+' arquivo(s) recebido(s). As fotos ficarão públicas quando você usar o site.');
+   setNotice(uploads.length+' arquivo(s) recebido(s). As imagens têm URL pública para uso no site; não envie conteúdo confidencial.');
   }catch(e){setNotice(errMsg(e))}finally{setUploading(false)}
  };
  const publish=async()=>{
@@ -235,7 +235,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
      {!activeSite&&<p className="delivery-hint">Salve o projeto para pesquisar um domínio.</p>}
      {quote?.available&&<div className="delivery-domain-offer"><div><span className="delivery-dot"/> <b>{quote.domain}</b> <small>Disponível</small></div><strong>{usd(quote.price)} <small>/{quote.years} ano(s)</small></strong><p>Renovação informada: {quote.renewalPrice?usd(quote.renewalPrice):'consulte o registrador'}. Valores em dólares (USD); câmbio e taxas do cartão podem variar.</p>
        <button className="delivery-outline" onClick={()=>{setCheckout(true);setAcceptCharge(false)}} disabled={!activeSite?.vercel_project_id}><Wallet size={16}/> Continuar compra segura</button>
-       {!activeSite.vercel_project_id&&<p>Publique primeiro o site para poder associar o domínio automaticamente.</p>}
+       {!activeSite?.vercel_project_id&&<p>Publique primeiro o site para poder associar o domínio automaticamente.</p>}
       </div>}
      {(activeSite?.domain_order_id||domainOrder)&&<div className="delivery-domain-order"><BadgeCheck size={20}/><div><b>Pedido de domínio enviado</b><p>O registro pode levar algum tempo. Verifique o status antes de considerar a compra concluída.</p><button disabled={domainLoading} onClick={()=>void checkOrder()} className="delivery-inline-button"><RefreshCw size={15}/> Consultar pedido</button></div></div>}
      {activeSite?.domain&&<div className="delivery-domain-linked"><CheckCircle2 size={18}/> Domínio registrado: <strong>{activeSite.domain}</strong></div>}

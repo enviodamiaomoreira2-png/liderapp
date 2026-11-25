@@ -25,6 +25,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  const [selectedOrg,setSelectedOrg]=useState('');
  const [activeSite,setActiveSite]=useState<SiteRecord|null>(null);
  const [device,setDevice]=useState<'desktop'|'mobile'>('desktop');
+ const [previewFull,setPreviewFull]=useState(false);
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false);
  const [notice,setNotice]=useState(''),[query,setQuery]=useState('');
  const [integrations,setIntegrations]=useState<Integrations|null>(null);
@@ -34,6 +35,12 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  const [domainOrder,setDomainOrder]=useState('');
  const change=<K extends keyof SiteBrief>(key:K,val:SiteBrief[K])=>setBrief(old=>({...old,[key]:val}));
  const preview=useMemo(()=>renderClientSite(brief),[brief]);
+ const openFullPreview=()=>{
+  const blobUrl=URL.createObjectURL(new Blob([preview],{type:'text/html;charset=utf-8'}));
+  const win=window.open(blobUrl,'_blank');
+  if(!win)setNotice('O navegador bloqueou a prévia. Habilite pop-ups para o Liderapp.');
+  window.setTimeout(()=>URL.revokeObjectURL(blobUrl),120000);
+ };
  const refresh=useCallback(async()=>{
   if(!supabase)return;
   const [a,b]=await Promise.all([
@@ -70,7 +77,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
   if(company.length<2)throw new Error('Informe o nome da empresa antes de salvar.');
   if(company.length>160)throw new Error('Nome da empresa muito longo.');
   const payload={client_name:company,organization_id:selectedOrg||null,site_data:current,
-   media_urls:[...(current.imageUrls||[]),...(current.logoUrl?[current.logoUrl]:[])],updated_at:new Date().toISOString()};
+   media_urls:[...(current.imageUrls||[]),...(current.logoUrl?[current.logoUrl]:[]),...(current.videoUrl?.includes('/storage/v1/object/public/delivery-media/')?[current.videoUrl]:[])],updated_at:new Date().toISOString()};
   let saved:SiteRecord;
   if(activeSite){
    const status=activeSite.status==='published'?'draft':activeSite.status==='publishing'?'publishing':'draft';
@@ -88,11 +95,19 @@ export default function EntregaWorkspace({userId}:{userId:string}){
   return saved;
  };
  const handleSave=async()=>{setBusy(true);try{await saveDraft();setNotice('Rascunho salvo no Liderapp. Nenhum site foi publicado ainda.')}catch(e){setNotice(errMsg(e))}finally{setBusy(false)}};
- const filesUploaded=async(files:FileList|null,type:'photos'|'logo')=>{
+ const filesUploaded=async(files:FileList|null,type:'photos'|'logo'|'video')=>{
   if(!files?.length||!supabase)return;
   if(!brief.clientName.trim()){setNotice('Informe o nome do cliente antes de subir fotos.');return}
-  const arr=Array.from(files).slice(0,type==='logo'?1:10);
-  for(const f of arr)if(f.size>10*1024*1024||!['image/jpeg','image/png','image/webp','image/avif'].includes(f.type)){setNotice('Aceitamos JPG, PNG, WebP ou AVIF com até 10 MB por arquivo.');return}
+  const arr=Array.from(files).slice(0,type==='logo'||type==='video'?1:12);
+  for(const f of arr){
+   const isVideo=type==='video';
+   const types=isVideo?['video/mp4','video/webm']:['image/jpeg','image/png','image/webp','image/avif'];
+   const max=isVideo?45*1024*1024:10*1024*1024;
+   if(f.size>max||!types.includes(f.type)){
+    setNotice(isVideo?'Envie vídeo MP4 ou WebM com até 45 MB. Para vídeos maiores, use um link do YouTube ou Vimeo.':'Aceitamos JPG, PNG, WebP ou AVIF com até 10 MB por arquivo.');
+    return;
+   }
+  }
   setUploading(true);
   try{
    const saved=await saveDraft();
@@ -105,16 +120,18 @@ export default function EntregaWorkspace({userId}:{userId:string}){
     const {data}=supabase.storage.from('delivery-media').getPublicUrl(path);
     uploads.push(data.publicUrl);
    }
-   const next:SiteBrief=type==='logo'?{...brief,logoUrl:uploads[0]}:{...brief,imageUrls:[...brief.imageUrls,...uploads].slice(0,10)};
+   const next:SiteBrief=type==='logo'?{...brief,logoUrl:uploads[0]}:
+    type==='video'?{...brief,videoUrl:uploads[0],videoTitle:brief.videoTitle||'Veja nosso trabalho em vídeo'}:
+    {...brief,imageUrls:[...(brief.imageUrls||[]),...uploads].slice(0,12)};
    setBrief(next);
    // Save the new urls explicitly rather than relying on asynchronous React state.
    const {data,error}=await supabase.from('delivery_sites').update({
-    site_data:next,media_urls:[...(next.imageUrls||[]),...(next.logoUrl?[next.logoUrl]:[])],status:'draft',
+    site_data:next,media_urls:[...(next.imageUrls||[]),...(next.logoUrl?[next.logoUrl]:[]),...(next.videoUrl?.includes('/storage/v1/object/public/delivery-media/')?[next.videoUrl]:[])],status:'draft',
     updated_at:new Date().toISOString()
    }).eq('id',saved.id).eq('user_id',userId).select('*').single();
    if(error)throw new Error(error.message);
    setActiveSite(data as SiteRecord);await refresh();
-   setNotice(uploads.length+' arquivo(s) recebido(s). As imagens têm URL pública para uso no site; não envie conteúdo confidencial.');
+   setNotice(uploads.length+' arquivo(s) recebido(s). A mídia enviada tem URL pública para publicação no site; não use arquivos confidenciais.');
   }catch(e){setNotice(errMsg(e))}finally{setUploading(false)}
  };
  const publish=async()=>{
@@ -269,7 +286,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
      <div className="delivery-upload-head"><b>Logotipo</b><small>PNG, JPG, WebP ou AVIF — até 10 MB.</small></div>
      <label className="delivery-dropzone"><ImageIcon size={20}/><span>{uploading?'Enviando arquivo...':'Clique para enviar a logo do cliente'}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading} onChange={e=>{void filesUploaded(e.target.files,'logo');e.target.value=''}}/></label>
      {brief.logoUrl&&<div className="delivery-logo-preview"><img alt="Logo do cliente" src={brief.logoUrl}/><button onClick={()=>change('logoUrl','')} title="Remover logo da página"><X size={16}/></button></div>}
-     <div className="delivery-upload-head"><b>Fotos do cliente</b><small>Adicione até 10 imagens. A primeira aparece no topo do site.</small></div>
+     <div className="delivery-upload-head"><b>Fotos do cliente</b><small>Adicione até 12 imagens. A primeira vira a capa e as demais compõem a galeria.</small></div>
      <label className="delivery-dropzone"><UploadCloud size={22}/><span>{uploading?'Enviando imagens...':'Selecionar fotos do ambiente, produtos ou equipe'}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple disabled={uploading} onChange={e=>{void filesUploaded(e.target.files,'photos');e.target.value=''}}/></label>
      {brief.imageUrls.length>0&&<div className="delivery-gallery">{brief.imageUrls.map((url,i)=><div key={url} className="delivery-thumb"><img src={url} alt={'Foto '+(i+1)}/><button aria-label="Remover da página" title="Remover da página" onClick={()=>change('imageUrls',brief.imageUrls.filter(x=>x!==url))}><X size={15}/></button></div>)}</div>}
     </section>
@@ -277,13 +294,37 @@ export default function EntregaWorkspace({userId}:{userId:string}){
      <div className="delivery-fields"><label className="delivery-field">WhatsApp com DDI <input value={brief.whatsapp} onChange={e=>change('whatsapp',e.target.value)} placeholder="Ex.: 55 34 99999-9999"/></label>
      <label className="delivery-field">E-mail <input type="email" value={brief.email} onChange={e=>change('email',e.target.value)} placeholder="contato@empresa.com.br"/></label>
      <label className="delivery-field">Instagram <input value={brief.instagram} onChange={e=>change('instagram',e.target.value)} placeholder="@empresa"/></label>
-     <label className="delivery-field">Endereço ou região de atendimento <input value={brief.address} onChange={e=>change('address',e.target.value)} placeholder="Rua, cidade, estado"/></label></div>
+     <label className="delivery-field">Endereço ou região de atendimento <input value={brief.address} onChange={e=>change('address',e.target.value)} placeholder="Rua, cidade, estado"/></label>
+     <label className="delivery-field">Telefone para ligações <input value={brief.phone||''} onChange={e=>change('phone',e.target.value)} placeholder="Ex.: 34 99999-9999"/></label>
+     <label className="delivery-field">Horário de atendimento <input value={brief.hours||''} onChange={e=>change('hours',e.target.value)} placeholder="Ex.: Seg–Sex, 8h às 18h"/></label>
+     <label className="delivery-field full">Texto do botão principal <input value={brief.ctaLabel||''} onChange={e=>change('ctaLabel',e.target.value)} placeholder="Ex.: Solicitar orçamento gratuito" /></label>
+     <label className="delivery-field full">Mensagem inicial do WhatsApp <textarea rows={2} value={brief.whatsappMessage||''} onChange={e=>change('whatsappMessage',e.target.value)} placeholder="Ex.: Olá! Vim pelo site e gostaria de um orçamento." /></label>
+     </div>
+     <div className="delivery-options"><label><input type="checkbox" checked={brief.showFloatingWhatsapp!==false} onChange={e=>change('showFloatingWhatsapp',e.target.checked)}/><span>Botão flutuante do WhatsApp</span></label>
+     <label><input type="checkbox" checked={brief.showMobileCta!==false} onChange={e=>change('showMobileCta',e.target.checked)}/><span>Barra fixa de orçamento no celular</span></label></div>
+    </section>
+    <section className="delivery-panel"><div className="delivery-section-head"><div><span className="delivery-tag">CONTEÚDO MULTIMÍDIA</span><h2>Vídeos que mostram o trabalho de verdade.</h2></div><ImageIcon size={22}/></div>
+      <div className="delivery-fields">
+        <label className="delivery-field full">Vídeo da empresa ou dos serviços <input type="url" value={brief.videoUrl||''} onChange={e=>change('videoUrl',e.target.value)} placeholder="Cole uma URL do YouTube, Vimeo ou envie MP4/WebM abaixo" /><small>Links do YouTube e Vimeo são incorporados na seção de vídeo. Arquivos MP4/WebM também podem aparecer na capa.</small></label>
+        <label className="delivery-field full">Título da seção de vídeo <input value={brief.videoTitle||''} onChange={e=>change('videoTitle',e.target.value)} placeholder="Ex.: Conheça nossa equipe em ação" /></label>
+        <label className="delivery-field full">Mídia principal da capa <select value={brief.heroMedia||'photo'} onChange={e=>change('heroMedia',e.target.value as SiteBrief['heroMedia'])}><option value="photo">Foto principal (recomendado)</option><option value="video">Vídeo em movimento (somente MP4/WebM)</option></select><small>Na capa, o vídeo funciona sem som. A reprodução completa com controles aparece na seção de vídeo.</small></label>
+      </div>
+      <div className="delivery-upload-head"><b>Enviar vídeo</b><small>MP4 ou WebM de até 45 MB. Para arquivos maiores, use hospedagem de vídeo.</small></div>
+      <label className="delivery-dropzone"><UploadCloud size={22}/><span>{uploading?'Enviando vídeo...':'Selecionar vídeo MP4 / WebM'}</span><input type="file" accept="video/mp4,video/webm" disabled={uploading} onChange={e=>{void filesUploaded(e.target.files,'video');e.target.value=''}}/></label>
+    </section>
+    <section className="delivery-panel"><div className="delivery-section-head"><div><span className="delivery-tag">SEÇÕES AVANÇADAS</span><h2>Conteúdo que transforma visitas em contatos.</h2></div><FileText size={22}/></div>
+      <div className="delivery-fields">
+        <label className="delivery-field full">Título do portfólio <input value={brief.galleryTitle||''} onChange={e=>change('galleryTitle',e.target.value)} placeholder="Ex.: Projetos e resultados que merecem destaque" /></label>
+        <label className="delivery-field full">Etapas do atendimento <textarea rows={3} value={brief.process||''} onChange={e=>change('process',e.target.value)} placeholder={'Entre em contato pelo WhatsApp\nReceba sua proposta personalizada\nAgendamos o serviço'} /><small>Uma etapa por linha; não adicionamos etapas fictícias.</small></label>
+        <label className="delivery-field full">Perguntas frequentes <textarea rows={4} value={brief.faq||''} onChange={e=>change('faq',e.target.value)} placeholder={'Quais regiões vocês atendem? | Atendemos toda a região de Uberlândia.\nComo solicitar orçamento? | Clique no botão do WhatsApp.'} /><small>Uma pergunta e uma resposta por linha, separadas por | (barra vertical).</small></label>
+        <label className="delivery-field full">Depoimentos reais de clientes <textarea rows={4} value={brief.testimonials||''} onChange={e=>change('testimonials',e.target.value)} placeholder={'Nome do cliente | Texto real autorizado pelo cliente'} /><small>Opcional. Só serão publicados depoimentos que você cadastrar e tiver autorização para usar.</small></label>
+      </div>
     </section>
    </div>
    <aside className="delivery-preview-column">
     <section className="delivery-panel delivery-preview-panel"><div className="delivery-preview-bar"><div><span className="delivery-tag">PRÉ-VISUALIZAÇÃO</span><h2>Veja antes de publicar.</h2></div><div className="delivery-device"><button className={device==='desktop'?'active':''} title="Computador" onClick={()=>setDevice('desktop')}><Monitor size={18}/></button><button className={device==='mobile'?'active':''} title="Celular" onClick={()=>setDevice('mobile')}><Smartphone size={18}/></button></div></div>
      <div className={'delivery-preview-frame '+device}><div className="delivery-browser"><span/><span/><span/><div>{'Prévia local · site do cliente'}</div></div><iframe title="Prévia do site em construção" srcDoc={preview} sandbox="" loading="lazy"/></div>
-     <div className="delivery-preview-actions"><button className="delivery-outline" disabled={busy||uploading} onClick={()=>void handleSave()}><Save size={17}/> {busy?'Salvando...':'Salvar rascunho'}</button><button className="delivery-primary" disabled={busy||uploading} onClick={()=>void publish()}><Rocket size={17}/> {busy?'Processando...':activeSite?.github_repo?'Atualizar publicação':'Criar site e publicar'}</button></div>
+     <div className="delivery-preview-full"><button className="delivery-inline-button" onClick={openFullPreview}><ExternalLink size={16}/> Abrir prévia em tela cheia</button><span>Prévia atualizada em tempo real</span></div><div className="delivery-preview-actions"><button className="delivery-outline" disabled={busy||uploading} onClick={()=>void handleSave()}><Save size={17}/> {busy?'Salvando...':'Salvar rascunho'}</button><button className="delivery-primary" disabled={busy||uploading} onClick={()=>void publish()}><Rocket size={17}/> {busy?'Processando...':activeSite?.github_repo?'Atualizar publicação':'Criar site e publicar'}</button></div>
      {activeSite&&<div className="delivery-publish-summary"><span className={'delivery-status '+siteStatus(activeSite)}>{stateText[activeSite.status]}</span><strong>{activeSite.client_name}</strong>
        {activeSite.github_url&&<a href={activeSite.github_url} target="_blank" rel="noopener noreferrer"><Code2 size={15}/> Abrir repositório GitHub <ExternalLink size={14}/></a>}
        {activeSite.vercel_url&&<a href={activeSite.vercel_url} target="_blank" rel="noopener noreferrer"><Globe2 size={15}/> Abrir site publicado <ExternalLink size={14}/></a>}

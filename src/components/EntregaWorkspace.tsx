@@ -8,7 +8,7 @@ import {type SiteBrief,initialSiteBrief,renderClientSite,slug} from '@/lib/deliv
 type SiteRecord={id:string;user_id:string;organization_id:string|null;client_name:string;project_slug:string;site_data:SiteBrief;media_urls:string[];status:'draft'|'publishing'|'published'|'needs_setup'|'error';github_repo:string|null;github_url:string|null;vercel_project_id:string|null;vercel_url:string|null;domain:string|null;domain_order_id:string|null;last_error:string|null;created_at:string;updated_at:string};
 type Org={id:string;name:string};
 type Quote={domain:string;available:boolean;price:number;renewalPrice:number|null;premium:boolean;currency:string;years:number;quoteId:string;expiresAt:string;note:string};
-type Integrations={configured:{github:boolean;vercel:boolean;team:boolean};missing:string[];settingsUrl:string};
+type Integrations={configured:{github:boolean;vercel:boolean;team:boolean;admin:boolean};missing:string[];settingsUrl:string};
 type Contact={firstName:string;lastName:string;email:string;phone:string;address1:string;city:string;state:string;zip:string;country:string;companyName:string};
 const blankContact:Contact={firstName:'',lastName:'',email:'',phone:'',address1:'',city:'',state:'',zip:'',country:'BR',companyName:''};
 const styles:[SiteBrief['style'],string,string][]=[['premium','Elegante','Luxuoso e sofisticado'],['minimal','Minimalista','Leve e editorial'],['bold','Impactante','Contraste e presença']];
@@ -120,7 +120,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
   setBusy(true);
   try{
    const saved=await saveDraft();
-   if(!integrations?.configured.github||!integrations?.configured.vercel||!integrations?.configured.team){
+   if(!integrations?.configured.github||!integrations?.configured.vercel||!integrations?.configured.team||!integrations?.configured.admin){
     setNotice('O site foi salvo, mas a publicação automática exige configurar as integrações de servidor na Vercel. Confira o aviso abaixo.');
     return;
    }

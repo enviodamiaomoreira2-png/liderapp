@@ -46,7 +46,11 @@ export async function POST(req:NextRequest){
   }else if(existingResponse.status!==404){await jsonResult(existingResponse,'GitHub (verificar versão anterior)')}
   const put=await gh('/repos/'+encodeURIComponent(owner)+'/'+encodeURIComponent(name)+'/contents/index.html','PUT',
     {message:'build: publicar site de '+site.client_name,content:Buffer.from(content,'utf8').toString('base64'),...(sha?{sha}:{})});
-  await jsonResult(put,'GitHub (enviar arquivos)');
+  const committed=await jsonResult(put,'GitHub (enviar arquivos)');
+  const desiredSha=String(committed?.commit?.sha||'');
+  if(!/^[a-f0-9]{40}$/i.test(desiredSha))throw new ApiError(502,'O GitHub não confirmou o commit do site.');
+  const {error:shaError}=await db.from('delivery_sites').update({git_commit_sha:desiredSha,updated_at:new Date().toISOString()}).eq('id',siteId).eq('user_id',userId);
+  if(shaError)throw new ApiError(500,'Site enviado ao GitHub, mas não foi possível registrar a versão: '+shaError.message);
   const vercelName=repoName.slice(0,60);
   let projectId=String(site.vercel_project_id||'');
   if(!projectId){

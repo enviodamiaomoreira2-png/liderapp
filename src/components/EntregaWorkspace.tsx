@@ -175,6 +175,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  };
  const chooseOrg=(id:string)=>{setSelectedOrg(id);const o=orgs.find(o=>o.id===id);if(o)change('clientName',o.name)};
  const siteStatus=(record:SiteRecord)=>record.status==='published'?'published':record.status;
+ const integrationMissing=integrations?.missing||[];
  const filteredSites=sites.filter(s=>(s.client_name+' '+s.project_slug).toLowerCase().includes(query.toLowerCase()));
  return <div className="delivery-root">
   <header className="delivery-head"><div><div className="delivery-eyebrow">LIDERAPP / OPERAÇÕES / ENTREGA</div><h1>Entrega <span>de projetos</span></h1><p>Do briefing ao site publicado — organizado em um único lugar.</p></div><button className="delivery-primary" onClick={newSite}><Plus size={17}/> Novo site</button></header>
@@ -226,7 +227,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
        {activeSite.vercel_project_id&&<button className="delivery-inline-button" disabled={busy} onClick={()=>void checkDeploy()}><RefreshCw size={15}/> Verificar deploy na Vercel</button>}
        {activeSite.last_error&&<p className="delivery-error">{activeSite.last_error}</p>}
       </div>}
-     {(integrations?.missing?.length??0)>0&&<div className="delivery-integration-warning"><Settings2 size={19}/><div><b>Ativação da publicação automática</b><p>Para o site criar repositórios e projetos sozinho, configure no ambiente seguro da Vercel: <strong>DELIVERY_GITHUB_TOKEN</strong>, <strong>DELIVERY_VERCEL_TOKEN</strong>, <strong>DELIVERY_VERCEL_TEAM_ID</strong> e <strong>DELIVERY_ADMIN_EMAIL</strong>. A conexão do ChatGPT não transfere credenciais para o app.</p><a href={integrations.settingsUrl} target="_blank" rel="noopener noreferrer">Abrir configurações da Vercel <ExternalLink size={13}/></a></div></div>}
+     {integrationMissing.length>0&&<div className="delivery-integration-warning"><Settings2 size={19}/><div><b>Ativação da publicação automática</b><p>Para o site criar repositórios e projetos sozinho, configure no ambiente seguro da Vercel: <strong>{integrationMissing.join(', ')}</strong>. A conexão do ChatGPT não transfere credenciais para o app.</p><a href={integrations?.settingsUrl||'https://vercel.com/dashboard'} target="_blank" rel="noopener noreferrer">Abrir configurações da Vercel <ExternalLink size={13}/></a></div></div>}
     </section>
     <section className="delivery-panel delivery-domain-panel"><div className="delivery-section-head"><div><span className="delivery-tag">REGISTRO DE DOMÍNIO</span><h2>Seu domínio, sem sair do Liderapp.</h2></div><Globe2 size={22}/></div>
      <p className="delivery-hint">Pesquise disponibilidade e consulte o preço real do registrador Vercel. A compra depende da sua confirmação e dos dados legais do titular.</p>

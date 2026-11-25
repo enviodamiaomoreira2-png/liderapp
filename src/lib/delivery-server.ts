@@ -16,11 +16,12 @@ export async function authorized(req:NextRequest):Promise<{db:SupabaseClient;use
 export const config=()=>({
  github:!!process.env.DELIVERY_GITHUB_TOKEN,
  vercel:!!process.env.DELIVERY_VERCEL_TOKEN,
- team:!!process.env.DELIVERY_VERCEL_TEAM_ID
+ team:!!process.env.DELIVERY_VERCEL_TEAM_ID,
+ admin:!!process.env.DELIVERY_ADMIN_EMAIL
 });
 export function requiredKeys(){
  const c=config();
- return Object.entries({DELIVERY_GITHUB_TOKEN:c.github,DELIVERY_VERCEL_TOKEN:c.vercel,DELIVERY_VERCEL_TEAM_ID:c.team}).filter(([,v])=>!v).map(([k])=>k);
+ return Object.entries({DELIVERY_GITHUB_TOKEN:c.github,DELIVERY_VERCEL_TOKEN:c.vercel,DELIVERY_VERCEL_TEAM_ID:c.team,DELIVERY_ADMIN_EMAIL:c.admin}).filter(([,v])=>!v).map(([k])=>k);
 }
 export function responseError(err:unknown){
  const status=err instanceof ApiError?err.status:500;

@@ -15,6 +15,13 @@ export async function GET(req:NextRequest){
   const d=result?.deployments?.[0];
   if(!d)return NextResponse.json({status:'publishing',repoUrl:site.github_url||null,vercelUrl:null,note:'Projeto criado. Ainda não foi encontrado um deploy na Vercel; verifique a conexão com o GitHub no painel da Vercel.'});
   const state=d.readyState||d.state;
+  const deployedSha=String(d.meta?.githubCommitSha||d.gitSource?.sha||'');
+  if(site.git_commit_sha&&deployedSha&&deployedSha!==site.git_commit_sha){
+   return NextResponse.json({status:'publishing',buildState:state,note:'A Vercel ainda está mostrando uma versão anterior. Aguarde o commit novo ser publicado.',repoUrl:site.github_url});
+  }
+  if(site.git_commit_sha&&state==='READY'&&!deployedSha){
+   return NextResponse.json({status:'publishing',buildState:state,note:'O deploy está pronto, mas a Vercel não informou o commit para validarmos a versão publicada.',repoUrl:site.github_url});
+  }
   if(state==='READY'){
    const vercelUrl=d.url?'https://'+String(d.url):null;
    if(vercelUrl)await db.from('delivery_sites').update({status:'published',vercel_url:vercelUrl,last_error:null,updated_at:new Date().toISOString()}).eq('id',site.id).eq('user_id',user.id);

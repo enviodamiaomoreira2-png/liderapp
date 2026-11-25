@@ -167,3 +167,26 @@
 .delivery-test-results>small{grid-column:span 2;color:#9b90af;line-height:1.5;font-size:11px}
 @media(max-width:1000px){.delivery-integration-test{align-items:stretch}.delivery-test-actions{width:100%;justify-content:flex-start}}
 @media(max-width:620px){.delivery-test-actions{flex-direction:column}.delivery-test-actions button{width:100%}.delivery-test-results{grid-template-columns:1fr}.delivery-test-results>small{grid-column:auto}}
+
+
+/* V2 builder controls — match the richer published client templates */
+.delivery-preview-full{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 1px 2px;flex-wrap:wrap}
+.delivery-preview-full>span{font-size:11px;color:#9e92b3}
+.delivery-preview-full .delivery-inline-button{font-size:12px;font-weight:800;color:#d0b2ff}
+.delivery-preview-frame.desktop{height:585px}
+.delivery-preview-frame.desktop iframe{flex:none;width:160%;height:calc((100% - 32px)*1.6);transform-origin:top left;transform:scale(.625);border:0}
+.delivery-preview-frame.mobile{height:620px;padding:0 max(0px,calc((100% - 375px)/2))}
+.delivery-preview-frame.mobile iframe{width:100%;flex:1;transform:none}
+.delivery-options{display:flex;flex-wrap:wrap;gap:13px 24px;margin-top:22px;padding:15px 17px;background:#252035;border:1px solid #3f3555;border-radius:10px}
+.delivery-options label{display:flex;align-items:center;gap:10px;cursor:pointer;color:#d7c9ea;font-size:12px;font-weight:700;line-height:1.5}
+.delivery-options label input{width:17px;height:17px;accent-color:#9873e8;cursor:pointer;flex-shrink:0}
+.delivery-dropzone:has(input[type="file"]:disabled){opacity:.52;cursor:not-allowed}
+.delivery-preview-panel{background:linear-gradient(145deg,#201a31,#151623)}
+.delivery-style-art.premium{background:radial-gradient(circle at 75% 40%,#b99f83,#38423d 56%,#14191b);border:1px solid #ffffff20}
+.delivery-style-art.minimal{background:radial-gradient(circle at 82% 40%,#a3b9a8,#e9ebe4 43%,#fcfdfb 72%)}
+.delivery-style-art.bold{background:radial-gradient(circle at 83% 40%,#4d3679,#0d172a 66%,#0a121a)}
+.delivery-style-art.premium>span{background:#bd9163}
+.delivery-style-art.minimal>span{background:#4b644d}
+.delivery-style-art.bold>span{background:#b55de8}
+@media(max-width:1400px){.delivery-preview-frame.desktop{height:510px}.delivery-preview-frame.mobile{height:550px}}
+@media(max-width:750px){.delivery-preview-frame.desktop{height:440px}.delivery-preview-frame.mobile{height:480px;padding:0 max(0px,calc((100% - 310px)/2))}.delivery-options{flex-direction:column;gap:12px}}

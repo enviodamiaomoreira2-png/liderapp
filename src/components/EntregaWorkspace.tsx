@@ -9,6 +9,7 @@ type SiteRecord={id:string;user_id:string;organization_id:string|null;client_nam
 type Org={id:string;name:string};
 type Quote={domain:string;available:boolean;price:number;renewalPrice:number|null;premium:boolean;currency:string;years:number;quoteId:string;expiresAt:string;note:string};
 type Integrations={configured:{github:boolean;vercel:boolean;team:boolean;admin:boolean};missing:string[];settingsUrl:string};
+type IntegrationTest={ok:boolean;github:{ok:boolean;status:number;message:string};vercel:{ok:boolean;status:number;message:string};checkedAt?:string;note?:string};
 type Contact={firstName:string;lastName:string;email:string;phone:string;address1:string;city:string;state:string;zip:string;country:string;companyName:string};
 const blankContact:Contact={firstName:'',lastName:'',email:'',phone:'',address1:'',city:'',state:'',zip:'',country:'BR',companyName:''};
 const styles:[SiteBrief['style'],string,string][]=[['premium','Elegante','Luxuoso e sofisticado'],['minimal','Minimalista','Leve e editorial'],['bold','Impactante','Contraste e presença']];
@@ -27,6 +28,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false);
  const [notice,setNotice]=useState(''),[query,setQuery]=useState('');
  const [integrations,setIntegrations]=useState<Integrations|null>(null);
+ const [integrationTest,setIntegrationTest]=useState<IntegrationTest|null>(null),[testing,setTesting]=useState(false),[smoking,setSmoking]=useState(false);
  const [domainName,setDomainName]=useState(''),[quote,setQuote]=useState<Quote|null>(null),[domainLoading,setDomainLoading]=useState(false);
  const [checkout,setCheckout]=useState(false),[contact,setContact]=useState<Contact>({...blankContact}),[acceptCharge,setAcceptCharge]=useState(false);
  const [domainOrder,setDomainOrder]=useState('');
@@ -140,6 +142,55 @@ export default function EntregaWorkspace({userId}:{userId:string}){
    if(site)setActiveSite(site as SiteRecord);
   }catch(e){setNotice(errMsg(e))}finally{setBusy(false)}
  };
+ const testConnections=async()=>{
+  setTesting(true);setIntegrationTest(null);
+  try{
+   const status=await api('/api/entrega/diagnostics');
+   setIntegrationTest(status as IntegrationTest);
+   setNotice(status.ok?'Os acessos do GitHub e da Vercel responderam corretamente. Agora é possível testar uma publicação real.':'Uma conexão precisa de ajustes. Confira o resultado abaixo.');
+  }catch(e){setNotice('Não foi possível executar o diagnóstico: '+errMsg(e))}
+  finally{setTesting(false)}
+ };
+ const publishTestSite=async()=>{
+  if(!supabase||busy||smoking)return;
+  if(!window.confirm('TESTE REAL: isto criará um repositório privado no GitHub e um novo projeto na Vercel, identificados como TESTE TÉCNICO LIDERAPP. Não será comprado domínio nem alterado nenhum cliente. Deseja continuar?'))return;
+  setSmoking(true);
+  try{
+   const check=await api('/api/entrega/diagnostics') as IntegrationTest;
+   setIntegrationTest(check);
+   if(!check.ok){setNotice('O teste de publicação foi interrompido: valide primeiro os acessos GitHub e Vercel.');return}
+   const demo:SiteBrief={
+    ...initialSiteBrief,
+    clientName:'TESTE TÉCNICO LIDERAPP',
+    segment:'Validação de publicação',
+    city:'Ambiente de testes',
+    headline:'Integração GitHub + Vercel',
+    subheadline:'Site técnico criado exclusivamente para testar o Construtor do Liderapp.',
+    description:'Esta é uma página de teste técnico. Não representa um cliente ou empresa real e não contém informações comerciais.',
+    services:'Criação de repositório privado no GitHub\nPublicação em um projeto independente na Vercel\nVerificação do deploy',
+    benefits:'Sem compra de domínio\nSem alterações nos cadastros dos clientes',
+    primaryColor:'#9060e8',
+    style:'premium',imageUrls:[]
+   };
+   const {data,error}=await supabase.from('delivery_sites').insert({
+    user_id:userId,organization_id:null,client_name:demo.clientName,
+    project_slug:'teste-tecnico-liderapp-'+crypto.randomUUID().slice(0,8),
+    site_data:demo,media_urls:[],status:'draft'
+   }).select('*').single();
+   if(error||!data)throw new Error('Falha ao criar projeto técnico: '+(error?.message||'nenhum registro'));
+   const record=data as SiteRecord;
+   setActiveSite(record);setBrief(demo);setSelectedOrg('');setDomainName('');
+   setSubtab('builder');
+   try{
+    const result=await api('/api/entrega/publish','POST',{siteId:record.id});
+    setNotice('Teste iniciado! '+String(result.note||'Verifique a publicação no painel abaixo.')+' Clique em "Verificar deploy" para confirmar que ficou online.');
+   }catch(e){setNotice('O projeto técnico foi salvo, mas a publicação retornou: '+errMsg(e)+'. Abra o projeto para tentar novamente.')}
+   const {data:updated}=await supabase.from('delivery_sites').select('*').eq('id',record.id).eq('user_id',userId).single();
+   if(updated)setActiveSite(updated as SiteRecord);
+   await refresh();
+  }catch(e){setNotice('Teste não concluído: '+errMsg(e))}
+  finally{setSmoking(false)}
+ };
  const checkDomain=async()=>{
   if(!activeSite){setNotice('Salve o site antes de pesquisar domínio.');return}
   setDomainLoading(true);setQuote(null);setCheckout(false);setDomainOrder('');
@@ -181,6 +232,18 @@ export default function EntregaWorkspace({userId}:{userId:string}){
   <header className="delivery-head"><div><div className="delivery-eyebrow">LIDERAPP / OPERAÇÕES / ENTREGA</div><h1>Entrega <span>de projetos</span></h1><p>Do briefing ao site publicado — organizado em um único lugar.</p></div><button className="delivery-primary" onClick={newSite}><Plus size={17}/> Novo site</button></header>
   <div className="delivery-tabs" role="tablist"><button role="tab" aria-selected={subtab==='builder'} className={subtab==='builder'?'active':''} onClick={()=>setSubtab('builder')}><LayoutTemplate size={17}/> Construtor de sites</button><button role="tab" aria-selected={subtab==='projects'} className={subtab==='projects'?'active':''} onClick={()=>setSubtab('projects')}><Globe2 size={17}/> Projetos e entregas <span>{sites.length}</span></button></div>
   {notice&&<div className="delivery-notice" role="status"><span>{notice}</span><button aria-label="Fechar aviso" onClick={()=>setNotice('')}><X size={17}/></button></div>}
+  <section className="delivery-integration-test" aria-label="Teste de integração">
+   <div className="delivery-test-intro"><span className="delivery-tag">TESTE DE PUBLICAÇÃO</span><h2>GitHub + Vercel</h2>
+    <p>Valide as conexões e, depois, crie um site técnico real para conferir o fluxo inteiro. Nenhuma compra de domínio será realizada.</p></div>
+   <div className="delivery-test-actions"><button className="delivery-outline" disabled={testing||smoking} onClick={()=>void testConnections()}><RefreshCw size={16}/>{testing?'Testando acessos...':'Testar conexões'}</button>
+    <button className="delivery-primary" disabled={testing||smoking||busy||!integrationTest?.ok} onClick={()=>void publishTestSite()}><Rocket size={16}/>{smoking?'Criando projeto...':'Publicar site de teste'}</button>
+   </div>
+   {integrationTest&&<div className="delivery-test-results">
+    <div className={integrationTest.github.ok?'delivery-test-ok':'delivery-test-fail'}>{integrationTest.github.ok?<CheckCircle2 size={17}/>:<X size={17}/>} <b>GitHub</b> <span>{integrationTest.github.message}</span></div>
+    <div className={integrationTest.vercel.ok?'delivery-test-ok':'delivery-test-fail'}>{integrationTest.vercel.ok?<CheckCircle2 size={17}/>:<X size={17}/>} <b>Vercel</b> <span>{integrationTest.vercel.message}</span></div>
+    <small>{integrationTest.note||'O teste de conexões é apenas leitura; a publicação real só acontece com seu clique.'}</small>
+   </div>}
+  </section>
   {subtab==='projects'?<>
    <div className="delivery-project-head"><div><h2>Seus sites</h2><p>Sites em construção, publicados e pendentes de configuração.</p></div><label className="delivery-search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Pesquisar empresa..."/></label></div>
    {loading?<p className="delivery-hint">Carregando projetos...</p>:filteredSites.length?<div className="delivery-project-grid">{filteredSites.map(s=><button key={s.id} onClick={()=>openSite(s)} className="delivery-project-card"><div className="delivery-project-top"><div className="delivery-avatar">{s.client_name.slice(0,1).toUpperCase()}</div><span className={'delivery-status '+siteStatus(s)}>{stateText[s.status]}</span></div><h3>{s.client_name}</h3><p>{s.site_data?.segment||'Site institucional'}</p><div className="delivery-project-links">{s.domain||s.vercel_url||'Aguardando publicação'}</div><div className="delivery-project-footer"><span>Atualizado em {new Date(s.updated_at).toLocaleDateString('pt-BR')}</span><ArrowRight size={16}/></div></button>)}</div>:<div className="delivery-empty"><Globe2 size={32}/><h3>Nenhum site por aqui</h3><p>Crie seu primeiro projeto usando o construtor.</p><button className="delivery-primary" onClick={newSite}><Plus size={16}/> Criar site</button></div>}

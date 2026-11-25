@@ -12,14 +12,16 @@ const escape=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':
 const words=(x:string)=>String(x||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,12);
 const safeImg=(url:string)=>/^https:\/\/[a-zA-Z0-9.-]+\/storage\/v1\/object\/public\/delivery-media\//.test(url)?url:'';
 const color=(value:string)=>/^#[0-9a-f]{6}$/i.test(value)?value:'#9364ef';
-const phone=(value:string)=>value.replace(/\D/g,'').slice(0,15);
+const phone=(value:string)=>{const p=value.replace(/\D/g,'').slice(0,15);return p.length===10||p.length===11?'55'+p:p};
 const safeInsta=(v:string)=>{const x=v.replace(/^@/,'').trim();return /^[a-zA-Z0-9._]{1,30}$/.test(x)?'https://instagram.com/'+x:/^https:\/\/(?:www\.)?instagram\.com\/[a-zA-Z0-9._/]+\/?$/.test(x)?x:''};
 export const slug=(value:string)=>String(value||'site').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,45)||'site';
 export function renderClientSite(brief:SiteBrief){
  const b={...initialSiteBrief,...brief};
  const title=escape(b.clientName||'Seu negócio');
- const headline=escape(b.headline||b.clientName||'Uma nova experiência começa aqui');
- const sub=escape(b.subheadline||b.segment||'Soluções para você');
+ const firstService=words(b.services)[0]||'';
+ const generatedHeadline=firstService?firstService+' com atenção a cada detalhe.':b.segment?b.segment+' com atendimento feito para você.':b.clientName||'Uma nova experiência começa aqui';
+ const headline=escape(b.headline||generatedHeadline);
+ const sub=escape(b.subheadline||b.description.slice(0,240)||b.segment||'Soluções para você');
  const desc=escape(b.description||'');
  const location=escape(b.city||'');
  const accent=color(b.primaryColor);
@@ -35,7 +37,7 @@ export function renderClientSite(brief:SiteBrief){
  const isLight=b.style==='minimal';
  const logoMarkup=logo?'<img class="logo-img" src="'+escape(logo)+'" alt="Logo de '+title+'" />':'<span class="text-logo">'+title+'</span>';
  const ctaText=ph?'Falar no WhatsApp':email?'Entrar em contato':'Conhecer serviços';
- const ctaHref=whatsapp|| (email?'mailto:'+encodeURIComponent(email):'#servicos');
+ const ctaHref=whatsapp|| (email?'mailto:'+email:(services.length?'#servicos':desc?'#sobre':'#inicio'));
  const cta='<a class="btn btn-primary" href="'+escape(ctaHref)+'" '+(whatsapp?'target="_blank" rel="noopener noreferrer"':'')+'>'+ctaText+' <span aria-hidden="true">↗</span></a>';
  const serviceCards=services.map((t,i)=>'<article class="service-card"><div class="s-index">'+String(i+1).padStart(2,'0')+'</div><h3>'+escape(t)+'</h3><div class="service-end">Conheça nossa solução <span>↗</span></div></article>').join('');
  const badges=benefits.map(x=>'<li><span class="tick">✓</span>'+escape(x)+'</li>').join('');

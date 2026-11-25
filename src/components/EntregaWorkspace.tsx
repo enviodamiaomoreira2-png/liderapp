@@ -116,7 +116,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
   }catch(e){setNotice(errMsg(e))}finally{setUploading(false)}
  };
  const publish=async()=>{
-  if(!clean(brief.clientName)||!clean(brief.headline)){setNotice('Informe o nome do cliente e o título principal do site.');return}
+  if(!clean(brief.clientName)||(!clean(brief.segment)&&!clean(brief.services))){setNotice('Informe a empresa e pelo menos o segmento ou os serviços. O título principal pode ser gerado automaticamente.');return}
   setBusy(true);
   try{
    const saved=await saveDraft();
@@ -193,7 +193,7 @@ export default function EntregaWorkspace({userId}:{userId:string}){
       <label className="delivery-field full">Nome da empresa <input value={brief.clientName} maxLength={160} onChange={e=>change('clientName',e.target.value)} placeholder="Ex.: SuperAR Climatiza"/></label>
       <label className="delivery-field">Segmento de atuação <input value={brief.segment} onChange={e=>change('segment',e.target.value)} placeholder="Ex.: Climatização e manutenção"/></label>
       <label className="delivery-field">Cidade / região <input value={brief.city} onChange={e=>change('city',e.target.value)} placeholder="Ex.: Uberlândia, MG"/></label>
-      <label className="delivery-field full">Título principal (headline) <textarea rows={2} maxLength={180} value={brief.headline} onChange={e=>change('headline',e.target.value)} placeholder="Ex.: Conforto e qualidade em climatização"/></label>
+      <label className="delivery-field full">Título principal (opcional — gerado automaticamente) <textarea rows={2} maxLength={180} value={brief.headline} onChange={e=>change('headline',e.target.value)} placeholder="Ex.: Conforto e qualidade em climatização"/></label>
       <label className="delivery-field full">Texto de apoio <textarea rows={2} maxLength={320} value={brief.subheadline} onChange={e=>change('subheadline',e.target.value)} placeholder="O que a empresa oferece e por que escolher ela?"/></label>
       <label className="delivery-field full">Sobre a empresa <textarea rows={4} maxLength={2300} value={brief.description} onChange={e=>change('description',e.target.value)} placeholder="História, expertise, proposta de valor..."/></label>
       <label className="delivery-field full">Serviços ou produtos <textarea rows={5} value={brief.services} onChange={e=>change('services',e.target.value)} placeholder={'Instalação de ar-condicionado\nHigienização de sistemas\nManutenção preventiva'}/><small>Um item por linha. Apenas itens informados serão publicados.</small></label>

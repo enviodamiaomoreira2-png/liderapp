@@ -190,3 +190,12 @@
 .delivery-style-art.bold>span{background:#b55de8}
 @media(max-width:1400px){.delivery-preview-frame.desktop{height:510px}.delivery-preview-frame.mobile{height:550px}}
 @media(max-width:750px){.delivery-preview-frame.desktop{height:440px}.delivery-preview-frame.mobile{height:480px;padding:0 max(0px,calc((100% - 310px)/2))}.delivery-options{flex-direction:column;gap:12px}}
+
+
+.delivery-readiness{background:#1b1c2c;border:1px solid #3d354f;border-radius:10px;padding:13px 15px;margin-top:15px}
+.delivery-readiness .delivery-tag{font-size:10px}
+.delivery-readiness-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 13px;margin-top:10px}
+.delivery-readiness-grid span{font-size:11px;font-weight:750;line-height:1.5}
+.delivery-readiness-grid .ready{color:#92e5b5}
+.delivery-readiness-grid .missing{color:#bd9ba1}
+@media(max-width:420px){.delivery-readiness-grid{grid-template-columns:1fr}}
